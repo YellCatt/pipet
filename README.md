@@ -107,7 +107,16 @@ dist/pipet/
 base_url: https://httpbin.org
 token: my-token
 log_level: info
+timeout: 30000
+pool_size: 1
+retry_count: 0
+retry_delay_ms: 0
 ```
+
+- `timeout`：HTTP 请求超时时间（毫秒，默认 30000）
+- `pool_size`：HTTP 客户端连接池大小（默认 1）
+- `retry_count`：请求失败后的重试次数（默认 0）
+- `retry_delay_ms`：每次重试前的等待时间（毫秒，默认 0）
 
 `log_level` 支持 `debug`、`info`、`warn`、`error`，不区分大小写。程序运行时的诊断日志会以 JSON Lines 格式同时输出到 **stderr** 和 **`logs/`** 目录下的 `pipet_YYYYMMDD_HHMMSS.log` 文件。
 

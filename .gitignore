@@ -1,9 +1,13 @@
 # Nim
 nimcache/
+releasecache/
 *.exe
 *.dll
 *.so
 *.dylib
+
+# Build output
+dist/
 
 # Generated reports
 report_*.psv
@@ -11,3 +15,10 @@ reports/
 
 # Generated logs
 logs/
+*.log
+
+# Environment / local files
+env.txt
+
+# IDE / tool
+.codebuddy/

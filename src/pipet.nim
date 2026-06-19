@@ -44,6 +44,17 @@ proc resolveDataFiles(userPaths: seq[string]): seq[string] =
     else:
       gLogger.warn("文件或目录不存在", {"path": p}.toTable)
 
+proc getIntConfig(vars: Table[string, string], key: string, defaultValue: int, minValue = low(int)): int =
+  result = defaultValue
+  if vars.hasKey(key):
+    try:
+      result = parseInt(vars[key])
+      if result < minValue:
+        result = defaultValue
+        gLogger.warn("配置项超出允许范围，已使用默认值", {"key": key, "value": vars[key], "min": $minValue, "default": $defaultValue}.toTable)
+    except ValueError:
+      gLogger.warn("配置项不是有效整数，已使用默认值", {"key": key, "value": vars[key], "default": $defaultValue}.toTable)
+
 proc main() =
   var configFile = ""
   var dataFileArgs: seq[string] = @[]
@@ -86,6 +97,13 @@ proc main() =
 
   if not vars.hasKey("base_url"):
     vars["base_url"] = "https://httpbin.org"
+
+  let timeout = getIntConfig(vars, "timeout", 30000, 0)
+  let poolSize = getIntConfig(vars, "pool_size", 1, 1)
+  let retryCount = getIntConfig(vars, "retry_count", 0, 0)
+  let retryDelayMs = getIntConfig(vars, "retry_delay_ms", 0, 0)
+
+  let pool = newHttpClientPool(poolSize, timeout)
 
   gLogger.level = parseLogLevel(vars.getOrDefault("log_level", "INFO"))
   gLogger.openLogFile("logs")
@@ -130,7 +148,7 @@ proc main() =
 
     gLogger.debug("开始执行用例", {"id": tc.id, "method": tc.httpMethod, "url": tc.url}.toTable)
     stdout.write "  [" & tc.id & "] " & tc.desc & " ... "
-    let r = runTest(tc)
+    let r = runTest(tc, pool, retryCount, retryDelayMs)
     results.add(r)
 
     let durationStr = formatFloat(r.durationSec, ffDecimal, 3) & "s"

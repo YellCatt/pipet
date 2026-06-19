@@ -32,6 +32,30 @@ type
     skipFields*: string
     tags*: string
 
+  HttpClientPool* = ref object
+    maxSize*: int
+    timeoutMs*: int
+    available*: seq[HttpClient]
+
+proc newHttpClientPool*(maxSize: int; timeoutMs: int): HttpClientPool =
+  result = HttpClientPool(maxSize: maxSize, timeoutMs: timeoutMs, available: @[])
+  for i in 0 ..< maxSize:
+    result.available.add(newHttpClient(timeout = timeoutMs))
+
+proc borrowClient*(pool: HttpClientPool): HttpClient =
+  if pool.available.len > 0:
+    result = pool.available.pop()
+  else:
+    result = newHttpClient(timeout = pool.timeoutMs)
+
+proc returnClient*(pool: HttpClientPool; client: HttpClient; discardClient: bool = false) =
+  if discardClient:
+    client.close()
+  elif pool.available.len < pool.maxSize:
+    pool.available.add(client)
+  else:
+    client.close()
+
 proc parseHeaders*(jsonStr: string): Table[string, string] =
   result = initTable[string, string]()
   let s = jsonStr.strip()
@@ -259,20 +283,13 @@ proc jsonDiff*(expect, actual: JsonNode, path: string = ""): seq[string] =
     if actual.kind != JNull:
       result.add(path & ": 期望 null，实际 " & $actual.kind)
 
-proc runTest*(tc: TestCase): TestResult =
+proc runTest*(tc: TestCase; pool: HttpClientPool; retryCount: int = 0; retryDelayMs: int = 0): TestResult =
   let start = epochTime()
   let expectBodyStr = $tc.expectBody
   let skipFields = collectSkipFields(tc.expectBody).join(",")
   let tags = tc.tags.join(",")
   let url = buildUrl(tc.url, tc.params)
   let (reqBody, contentType) = selectRequestBody(tc)
-  var client = newHttpClient(timeout = 30000)
-  defer: client.close()
-
-  for k, v in tc.headers:
-    client.headers[k] = v
-  if contentType.len > 0 and not tc.headers.hasKey("Content-Type"):
-    client.headers["Content-Type"] = contentType
 
   gLogger.debug("准备发送 HTTP 请求", {
     "id": tc.id,
@@ -280,37 +297,63 @@ proc runTest*(tc: TestCase): TestResult =
     "url": url,
     "headers_count": $tc.headers.len,
     "body_len": $reqBody.len,
-    "expect_status": $tc.expectStatus
+    "expect_status": $tc.expectStatus,
+    "retry_count": $retryCount,
+    "retry_delay_ms": $retryDelayMs
   }.toTable)
 
   var resp: Response
+  var lastError = ""
+  var attempt = 0
+  let maxAttempts = retryCount + 1
 
-  try:
-    resp = case tc.httpMethod
-      of "GET":
-        if reqBody.len > 0: client.request(url, HttpGet, body = reqBody)
-        else: client.get(url)
-      of "POST": client.post(url, body = reqBody)
-      of "PUT": client.put(url, body = reqBody)
-      of "PATCH": client.request(url, httpMethod = HttpPatch, body = reqBody)
-      of "DELETE": client.request(url, httpMethod = HttpDelete, body = reqBody)
+  while attempt < maxAttempts:
+    attempt += 1
+    var client = pool.borrowClient()
+    try:
+      for k, v in tc.headers:
+        client.headers[k] = v
+      if contentType.len > 0 and not tc.headers.hasKey("Content-Type"):
+        client.headers["Content-Type"] = contentType
+
+      resp = case tc.httpMethod
+        of "GET":
+          if reqBody.len > 0: client.request(url, HttpGet, body = reqBody)
+          else: client.get(url)
+        of "POST": client.post(url, body = reqBody)
+        of "PUT": client.put(url, body = reqBody)
+        of "PATCH": client.request(url, httpMethod = HttpPatch, body = reqBody)
+        of "DELETE": client.request(url, httpMethod = HttpDelete, body = reqBody)
+        else:
+          gLogger.error("未知 HTTP 方法", {"method": tc.httpMethod}.toTable)
+          pool.returnClient(client)
+          return TestResult(
+            id: tc.id, desc: tc.desc, status: "FAIL", durationSec: 0.0,
+            expectStatus: tc.expectStatus, actualStatus: 0,
+            diff: "未知 HTTP 方法: " & tc.httpMethod,
+            actualBody: "",
+            expectBody: expectBodyStr,
+            skipFields: skipFields,
+            tags: tags
+          )
+      lastError = ""
+      pool.returnClient(client)
+      break
+    except CatchableError as e:
+      lastError = e.msg
+      pool.returnClient(client, discardClient = true)
+      if attempt < maxAttempts:
+        gLogger.warn("请求失败，准备重试", {"id": tc.id, "attempt": $attempt, "error": e.msg}.toTable)
+        if retryDelayMs > 0:
+          sleep(retryDelayMs)
       else:
-        gLogger.error("未知 HTTP 方法", {"method": tc.httpMethod}.toTable)
-        return TestResult(
-          id: tc.id, desc: tc.desc, status: "FAIL", durationSec: 0.0,
-          expectStatus: tc.expectStatus, actualStatus: 0,
-          diff: "未知 HTTP 方法: " & tc.httpMethod,
-          actualBody: "",
-          expectBody: expectBodyStr,
-          skipFields: skipFields,
-          tags: tags
-        )
-  except CatchableError as e:
-    gLogger.error("请求异常", {"id": tc.id, "error": e.msg}.toTable)
+        gLogger.error("请求异常", {"id": tc.id, "attempt": $attempt, "error": e.msg}.toTable)
+
+  if lastError.len > 0:
     return TestResult(
       id: tc.id, desc: tc.desc, status: "FAIL", durationSec: 0.0,
       expectStatus: tc.expectStatus, actualStatus: 0,
-      diff: "请求异常: " & e.msg,
+      diff: "请求异常: " & lastError,
       actualBody: "N/A",
       expectBody: expectBodyStr,
       skipFields: skipFields,
