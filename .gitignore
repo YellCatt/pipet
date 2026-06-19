@@ -1,0 +1,13 @@
+# Nim
+nimcache/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Generated reports
+report_*.psv
+reports/
+
+# Generated logs
+logs/

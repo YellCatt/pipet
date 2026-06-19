@@ -1,0 +1,2 @@
+base_url: https://httpbin.org
+log_level: debug
