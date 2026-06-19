@@ -1,0 +1,2 @@
+id|skip|desc|method|url|headers|params|form|json|body|files|expected_status|expected_body|tags|extract
+upload_01|0|上传文件到 httpbin|POST|{{base_url}}/post|{}||name=demo&desc=hello|||{"upload":"data/upload_sample.txt"}|200|{"form":{"name":"demo","desc":"hello"},"files":{"upload":"{{skip}}"}}|smoke|

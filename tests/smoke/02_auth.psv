@@ -1,0 +1,3 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract
+# 冒烟测试：认证接口基础可用性
+auth_01|0|携带Token访问|GET|{{base_url}}/bearer|{"Authorization":"Bearer smoke-token"}|||||200|{"token":"smoke-token"}|smoke

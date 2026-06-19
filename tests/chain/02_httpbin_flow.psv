@@ -1,0 +1,4 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract
+# 使用 httpbin.org 就能直接跑通的链式测试示例，演示变量提取和传递
+chain_01|0|POST JSON 并提取密码|POST|{{base_url}}/post|{}|||{"username":"admin","password":"secret"}||200|{"json":{"username":"admin","password":"secret"}}|chain|{"token":"json.password"}
+chain_02|0|使用提取的 token 作为参数|GET|{{base_url}}/get|{}|token={{token}}||||200|{"args":{"token":"secret"}}|chain|

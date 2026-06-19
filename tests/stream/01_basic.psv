@@ -1,0 +1,6 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract|stream_mode|stream_assert
+# 流式代码路径检查：httpbin 返回普通 JSON，因此不会解析到 SSE chunk，
+# 但会验证 stream_mode 分支不会导致程序崩溃。
+stream_path|0|流式代码路径检查|GET|https://httpbin.org/get|{}|||||200|{"aggregated_content":"","chunk_count":0}|stream||1|[]
+# SSE 示例：需要一个真实的 SSE 服务端（如 OpenAI 接口），默认跳过。
+stream_openai|1|SSE 流式断言示例|POST|https://api.openai.com/v1/chat/completions|{"Content-Type":"application/json","Authorization":"Bearer {{openai_token}}"}|||{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"hi"}],"stream":true}||200|{"aggregated_content":"{{regex:.*}}","chunk_count":"{{skip}}"}|stream||1|[{"kind":"contains","pattern":"hi","min_chunks":1}]

@@ -21,17 +21,20 @@ pipet/
 ├── .gitignore
 ├── config.nims              # 默认启用 SSL 的项目配置
 ├── config.yaml              # 变量配置
+├── data/                    # 测试数据文件，如上传文件
 ├── src/
 │   ├── pipet.nim            # 主入口
 │   └── pipetpkg/
-    │       ├── core.nim         # 用例加载、执行、JSON 对比
-    │       ├── logger.nim       # JSON Lines 日志
-    │       └── report.nim       # PSV 报告输出
+│       ├── core.nim         # 用例加载、执行、JSON 对比
+│       ├── logger.nim       # JSON Lines 日志
+│       └── report.nim       # PSV 报告输出
 └── tests/
-    ├── test_config.yaml     # 测试用 YAML 配置
+    ├── smoke/
+    ├── chain/
+    ├── negative/
+    ├── stream/            # 流式断言示例
     ├── test_data.psv        # 示例测试数据
-    ├── test_data2.psv       # 多文件示例
-    └── test_pipet.nim       # 单元测试
+    └── test_data2.psv       # 多文件示例
 ```
 
 ## 编译运行
@@ -80,6 +83,8 @@ nimble package
 dist/pipet/
 ├── pipet.exe
 ├── config.yaml
+├── README.md
+├── data/
 └── tests/
     ├── test_data.psv
     └── test_data2.psv
@@ -133,22 +138,58 @@ retry_delay_ms: 0
 ## 测试用例格式
 
 ```psv
-id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract|stream_mode|stream_assert
 ```
 
-- `skip` 为 `1` 时跳过该用例
+- `stream_mode` 为 `1` 时启用 SSE 流式断言分支（默认不启用）
+- `stream_assert` 为流式断言规则 JSON 数组，每个元素包含 `kind`、`pattern`、`max_wait_ms`、`min_chunks`
+  - `kind` 可选 `contains`（聚合内容包含子串）、`regex`（聚合内容匹配正则）、`json_path`（当前 SSE 节点存在指定 JSON 路径）
+  - `pattern` 为断言内容，支持 `{{var}}` 变量替换
+  - `max_wait_ms` 为最大等待时间（毫秒，目前作为保留字段，后续支持实时流可据此提前结束）
+  - `min_chunks` 为断言通过所需的最少 SSE chunk 数
+- `match_mode` 控制响应体匹配方式，可选 `exact`（默认，严格全量匹配）或 `subset`（子集匹配）
+- `expected_body` 中字段值写成 `{{not_exists}}` 表示该字段必须不存在；写成 `{{skip}}` 表示跳过该字段对比
+- 流式用例的 `expected_body` 不再断言原始响应 JSON，而是断言最终聚合对象：`{"aggregated_content": "...", "chunk_count": N}`
 - `expected_body` 为期望的完整 JSON 响应体
-- 字段值写成 `{{skip}}` 表示跳过该字段对比
-- 字段值写成 `{{regex:...}}` 表示用正则表达式断言该字段，例如 `{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}}`
+- 字段值写成 `{{regex:...}}` 表示用正则表达式断言该字段，例如 `{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}`
 - 所有列支持 `{{var}}` 变量替换
 - `tags` 为标签列表，多个标签用逗号分隔，用于 `--tags` 过滤
-- 列按需加载：每个 PSV 文件可以只包含自己需要的列，不存在的列留空或省略表头即可
-- 入参类型按优先级 `json` > `form` > `body` > `payload` 自动选择：
+- 列按需加载：每个 PSV 文件可以只包含自己需要的列，不存在的列留空或省略表头即可；`json`、`form`、`body` 等空列表示不发送该类型请求体
+- 入参类型按优先级自动选择：
   - `params`：URL 查询参数，如 `foo=bar&baz=1`，自动拼接到 URL
-  - `form`：自动以 `application/x-www-form-urlencoded` 发送
+  - `form`：自动以 `application/x-www-form-urlencoded` 发送；当字段值以 `@` 或 `file://` 开头时，会作为 `multipart/form-data` 文件字段上传，例如 `name=demo&upload=@data/sample.txt`
   - `json`：自动以 `application/json` 发送
   - `body`：原始请求体，配合 `headers` 中的 `Content-Type` 使用
   - `payload`：兼容旧列，作为无类型原始 body
+  - 优先级：`form`（含文件字段）> `json` > `form`（纯文本）> `body` > `payload`
+
+## 严格全量匹配
+
+默认使用 `exact`（严格全量匹配）：响应 JSON 必须与 `expected_body` 字段一一对应、不允许额外字段。如果只想检查响应包含 `expected_body` 中的字段且值一致，将 `match_mode` 设为 `subset`。
+
+```psv
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|match_mode
+strict_01|0|严格匹配 IP|GET|{{base_url}}/ip|{}||||||200|{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}|strict|
+```
+
+在 `expected_body` 中使用 `{{not_exists}}` 可以断言某个字段必须不存在（在 `subset` 和 `exact` 模式下均生效）：
+
+```psv
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|match_mode
+strict_02|0|不允许返回敏感字段|GET|{{base_url}}/get|{}||||||200|{"args":{},"password":"{{not_exists}}"}|strict|exact
+```
+
+## 流式断言
+
+当后端返回 SSE（Server-Sent Events）流时，可在 PSV 中开启 `stream_mode` 并定义 `stream_assert` 规则。程序会按行解析 `data: {...}`，提取 OpenAI 风格的 `choices[0].delta.content`，实时检查断言。
+
+```psv
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract|stream_mode|stream_assert
+stream_01|0|SSE 流式断言示例|POST|{{base_url}}/chat/completions|{"Content-Type":"application/json"}|||{"model":"gpt-4","messages":[{"role":"user","content":"hi"}],"stream":true}||200|{"aggregated_content":"{{regex:.*hi.*}}","chunk_count":"{{skip}}"}|stream||1|[{"kind":"contains","pattern":"hi","min_chunks":1}]
+```
+
+- 命中任意 `stream_assert` 规则时立即返回 PASS
+- 若未命中，则在流结束后用 `expected_body` 断言 `{"aggregated_content": "...", "chunk_count": N}`
 
 ## 标签过滤
 

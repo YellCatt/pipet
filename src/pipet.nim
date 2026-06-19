@@ -17,25 +17,31 @@ proc resolveConfigFile(userPath: string): string =
       return c
   return "config.yaml"
 
+proc collectPsvFiles(dir: string): seq[string] =
+  result = @[]
+  if not dirExists(dir): return
+  for f in walkDirRec(dir):
+    if f.endsWith(".psv") and fileExists(f):
+      result.add(f)
+
 proc resolveDataFiles(userPaths: seq[string]): seq[string] =
   if userPaths.len == 0:
     let candidates = @[
-      getAppDir() / "test_data.psv",
-      "test_data.psv",
-      getAppDir() / "tests" / "test_data.psv",
-      "tests" / "test_data.psv"
+      getAppDir() / "tests",
+      "tests"
     ]
     for c in candidates:
-      if fileExists(c):
-        gLogger.debug("找到默认用例文件", {"path": c}.toTable)
-        return @[c]
-    gLogger.debug("未找到默认用例文件", {"candidates": candidates.join(", ")}.toTable)
-    return @[candidates[0]]
+      result = collectPsvFiles(c)
+      if result.len > 0:
+        gLogger.debug("找到默认用例目录", {"dir": c, "files": $result.len}.toTable)
+        return result
+    gLogger.debug("未找到默认用例目录，使用默认 test_data.psv", initTable[string, string]())
+    return @["test_data.psv"]
   result = @[]
   for p in userPaths:
     if dirExists(p):
       gLogger.debug("扫描目录用例文件", {"dir": p}.toTable)
-      for f in walkFiles(p / "*.psv"):
+      for f in collectPsvFiles(p):
         result.add(f)
         gLogger.debug("发现用例文件", {"file": f}.toTable)
     elif fileExists(p):
@@ -109,61 +115,74 @@ proc main() =
   gLogger.openLogFile("logs")
   gLogger.info("配置加载完成", {"config": configFile, "log_level": $gLogger.level, "vars_count": $vars.len}.toTable)
 
-  var cases: seq[TestCase] = @[]
-  for f in dataFiles:
-    cases.add(loadCases(f, vars))
-  gLogger.info("用例加载完成", {"total_cases": $cases.len, "data_files": dataFiles.join(", ")}.toTable)
-  if cases.len == 0:
-    echo "没有加载到测试用例"
-    return
-
   let selectedTags = tagsFilter.split(',').mapIt(it.strip()).filterIt(it.len > 0)
-  if selectedTags.len > 0:
-    gLogger.info("按标签过滤", {"tags": tagsFilter, "before": $cases.len}.toTable)
-    cases = cases.filterIt(it.tags.any(tag => tag in selectedTags))
-    gLogger.info("标签过滤完成", {"after": $cases.len}.toTable)
-    if cases.len == 0:
-      echo "没有符合标签的测试用例: " & tagsFilter
-      return
-
-  var results: seq[TestResult]
+  var allResults: seq[TestResult]
 
   echo "╔══════════════════════════════════════════════════════╗"
   echo "║              pipet 接口测试                          ║"
   echo "╚══════════════════════════════════════════════════════╝\n"
 
-  for tc in cases:
-    if tc.skip:
-      gLogger.info("跳过用例", {"id": tc.id, "desc": tc.desc}.toTable)
-      results.add TestResult(
-        id: tc.id, desc: tc.desc, status: "SKIP", durationSec: 0.0,
-        expectStatus: tc.expectStatus, actualStatus: 0, diff: "",
-        actualBody: "",
-        expectBody: $tc.expectBody,
-        skipFields: collectSkipFields(tc.expectBody).join(","),
-        tags: tc.tags.join(",")
-      )
-      styledEcho styleDim, "  [", tc.id, "] ", tc.desc, " ... SKIP"
+  for f in dataFiles:
+    var fileVars = vars
+    var fileCases = loadCases(f, fileVars)
+    if fileCases.len == 0:
       continue
 
-    gLogger.debug("开始执行用例", {"id": tc.id, "method": tc.httpMethod, "url": tc.url}.toTable)
-    stdout.write "  [" & tc.id & "] " & tc.desc & " ... "
-    let r = runTest(tc, pool, retryCount, retryDelayMs)
-    results.add(r)
+    if selectedTags.len > 0:
+      gLogger.info("按标签过滤", {"tags": tagsFilter, "before": $fileCases.len}.toTable)
+      fileCases = fileCases.filterIt(it.tags.any(tag => tag in selectedTags))
+      gLogger.info("标签过滤完成", {"after": $fileCases.len}.toTable)
+      if fileCases.len == 0:
+        continue
 
-    let durationStr = formatFloat(r.durationSec, ffDecimal, 3) & "s"
-    gLogger.debug("用例执行完成", {"id": r.id, "status": r.status, "duration_s": durationStr}.toTable)
-    case r.status
-    of "PASS":
-      styledEcho fgGreen, "PASS", resetStyle, " (" & durationStr & ")"
-    of "FAIL":
-      styledEcho fgRed, "FAIL", resetStyle, " (" & durationStr & ")"
-      if r.diff.len > 80:
-        echo "       " & r.diff[0..79] & "..."
+    echo "\n  📁 " & f
+    var fileResults: seq[TestResult]
+
+    for tc in fileCases:
+      if tc.skip:
+        gLogger.info("跳过用例", {"id": tc.id, "desc": tc.desc}.toTable)
+        fileResults.add TestResult(
+          id: tc.id, desc: tc.desc, status: "SKIP", durationSec: 0.0,
+          expectStatus: tc.expectStatus, actualStatus: 0, diff: "",
+          actualBody: "",
+          expectBody: $tc.expectBody,
+          tags: tc.tags.join(",")
+        )
+        styledEcho styleDim, "    [", tc.id, "] ", tc.desc, " ... SKIP"
+        continue
+
+      let resolvedTc = resolveTestCase(tc, fileVars)
+      gLogger.debug("开始执行用例", {"id": tc.id, "method": resolvedTc.httpMethod, "url": resolvedTc.url, "stream_mode": $resolvedTc.streamMode}.toTable)
+      stdout.write "    [" & tc.id & "] " & tc.desc & " ... "
+      let r = if resolvedTc.streamMode: runStreamTest(resolvedTc, pool) else: runTest(resolvedTc, pool, retryCount, retryDelayMs)
+      fileResults.add(r)
+
+      let durationStr = formatFloat(r.durationSec, ffDecimal, 3) & "s"
+      gLogger.debug("用例执行完成", {"id": r.id, "status": r.status, "duration_s": durationStr}.toTable)
+      case r.status
+      of "PASS":
+        styledEcho fgGreen, "PASS", resetStyle, " (" & durationStr & ")"
+        if tc.extract.len > 0:
+          let extracted = extractVars(r.actualBody, tc.extract)
+          for k, v in extracted:
+            fileVars[k] = v
+            gLogger.info("提取上下文变量", {"key": k, "value": v}.toTable)
+      of "FAIL":
+        styledEcho fgRed, "FAIL", resetStyle, " (" & durationStr & ")"
+        if r.diff.len > 80:
+          echo "         " & r.diff[0..79] & "..."
+        else:
+          echo "         " & r.diff
       else:
-        echo "       " & r.diff
-    else:
-      discard
+        discard
+
+    allResults.add(fileResults)
+
+  let results = allResults
+  gLogger.info("用例加载完成", {"total_cases": $results.len, "data_files": dataFiles.join(", ")}.toTable)
+  if results.len == 0:
+    echo "\n没有加载到测试用例"
+    return
 
   let passed = results.countIt(it.status == "PASS")
   let failed = results.countIt(it.status == "FAIL")

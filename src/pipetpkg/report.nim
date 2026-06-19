@@ -11,7 +11,7 @@ proc normalizeBody(s: string): string =
     return s.replace("\r\n", "").replace("\n", "").replace("\r", "")
 
 proc writeRows(f: File, results: seq[TestResult]) =
-  f.writeLine "id|desc|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|skip_fields"
+  f.writeLine "id|desc|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body"
 
   gLogger.debug("写入报告行", {"count": $results.len}.toTable)
   for r in results:
@@ -20,12 +20,11 @@ proc writeRows(f: File, results: seq[TestResult]) =
     let safeTags = r.tags.replace("|", ";").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
     let safeBody = normalizeBody(r.actualBody).replace("|", ";")
     let safeExpect = normalizeBody(r.expectBody).replace("|", ";")
-    let safeSkip = r.skipFields.replace("|", ";").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
     let durationStr = formatFloat(r.durationSec, ffDecimal, 3)
 
     f.writeLine r.id & "|" & safeDesc & "|" & safeTags & "|" & r.status & "|" & durationStr &
                 "|" & $r.expectStatus & "|" & $r.actualStatus & "|" & safeDiff & "|" & safeBody &
-                "|" & safeExpect & "|" & safeSkip
+                "|" & safeExpect
 
 proc writePsvReport*(results: seq[TestResult], filename: string) =
   let f = open(filename, fmWrite)

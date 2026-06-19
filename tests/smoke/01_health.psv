@@ -1,0 +1,3 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract
+# 冒烟测试：服务基础可用性检查
+health_01|0|服务健康检查|GET|{{base_url}}/get|{}|health=ok||||200|{"args":{"health":"ok"}}|smoke

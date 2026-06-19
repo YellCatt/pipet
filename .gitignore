@@ -22,3 +22,6 @@ env.txt
 
 # IDE / tool
 .codebuddy/
+nimble.develop
+nimble.paths
+nimbledeps

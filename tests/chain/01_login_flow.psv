@@ -1,0 +1,6 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract
+# 链式测试：登录 -> 获取用户信息 -> 修改用户信息
+# 本示例假设后端提供 /auth/login、/user/info、/user/update，base_url 为真实 API 地址时可直接运行
+login_01|0|登录获取token|POST|{{base_url}}/auth/login|{}|||{"username":"admin","password":"123456"}||200|{"code":0,"data":{"token":"{{skip}}"}}|chain|{"token":"data.token"}
+login_02|0|获取用户信息|GET|{{base_url}}/user/info|{"Authorization":"Bearer {{token}}"}|||||200|{"code":0,"data":{"id":"{{skip}}"}}|chain|{"userId":"data.id"}
+login_03|0|修改用户昵称|POST|{{base_url}}/user/update|{"Authorization":"Bearer {{token}}"}|||{"userId":"{{userId}}","nickname":"newName"}||200|{"code":0}|chain|

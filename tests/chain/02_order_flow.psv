@@ -1,0 +1,6 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract
+# 链式测试：下单 -> 支付 -> 查询订单
+# 本示例为业务模板，base_url 为真实 API 地址时可直接运行
+order_01|0|创建订单|POST|{{base_url}}/order/create|{"Authorization":"Bearer {{token}}"}|||{"product":"A100","quantity":1}||200|{"code":0,"data":{"orderId":"{{skip}}"}}|chain|{"orderId":"data.orderId"}
+order_02|0|支付订单|POST|{{base_url}}/order/pay|{"Authorization":"Bearer {{token}}"}|||{"orderId":"{{orderId}}","payType":"alipay"}||200|{"code":0,"data":{"status":"paid"}}|chain|
+order_03|0|查询订单状态|GET|{{base_url}}/order/{{orderId}}|{"Authorization":"Bearer {{token}}"}|||||200|{"code":0,"data":{"status":"paid"}}|chain|

@@ -17,12 +17,11 @@ task package, "Package exe and resources into dist/pipet":
   rmDir "dist"
   releaseTask()
   cpFile "config.yaml", "dist/pipet/config.yaml"
-  mkdir "dist/pipet/tests"
-  for f in listFiles("tests"):
-    if f.endsWith(".psv"):
-      cpFile f, "dist/pipet/" & f
+  cpFile "README.md", "dist/pipet/README.md"
+  cpDir "tests", "dist/pipet/tests"
+  cpDir "data", "dist/pipet/data"
   echo "打包完成: dist/pipet/"
-  echo "可分发内容: pipet.exe、config.yaml、tests/*.psv"
+  echo "可分发内容: pipet.exe、config.yaml、README.md、tests/、data/"
 
 task dist, "Alias for package task":
   packageTask()

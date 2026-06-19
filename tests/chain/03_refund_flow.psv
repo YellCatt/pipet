@@ -1,0 +1,6 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract
+# 链式测试：申请退款 -> 审核退款 -> 确认退款
+# 本示例为业务模板，base_url 为真实 API 地址时可直接运行
+refund_01|0|申请退款|POST|{{base_url}}/refund/apply|{"Authorization":"Bearer {{token}}"}|||{"orderId":"{{orderId}}","reason":"质量问题"}||200|{"code":0,"data":{"refundId":"{{skip}}"}}|chain|{"refundId":"data.refundId"}
+refund_02|0|审核退款|POST|{{base_url}}/refund/audit|{"Authorization":"Bearer {{token}}"}|||{"refundId":"{{refundId}}","result":"approved"}||200|{"code":0}|chain|
+refund_03|0|确认退款|POST|{{base_url}}/refund/confirm|{"Authorization":"Bearer {{token}}"}|||{"refundId":"{{refundId}}"}||200|{"code":0}|chain|

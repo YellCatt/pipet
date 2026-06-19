@@ -1,0 +1,6 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract
+# 异常测试：Token 失效、参数非法、权限不足等
+# 本示例为业务模板，base_url 为真实 API 地址时可直接运行
+neg_01|0|Token失效或错误|GET|{{base_url}}/api/protected|{"Authorization":"Bearer invalid_token"}|||||401|{"code":401}|negative
+neg_02|0|请求参数非法|POST|{{base_url}}/api/order|{"Content-Type":"application/json"}|||{"quantity":-1}||400|{"code":400}|negative
+neg_03|0|权限不足|GET|{{base_url}}/api/admin/users|{"Authorization":"Bearer user_token"}|||||403|{"code":403}|negative
