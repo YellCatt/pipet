@@ -1,3 +1,0 @@
-id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags
-9|0|第二个文件GET|GET|{{base_url}}/get|{}|baz=qux||||200|{"args":{"baz":"qux"}}|multi
-10|0|第二个文件POST JSON|POST|{{base_url}}/post|{}|||{"key":"val"}||200|{"json":{"key":"val"}}|multi

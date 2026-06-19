@@ -1,9 +1,0 @@
-id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags
-1|0|获取IP带参数|GET|{{base_url}}/get|{}|foo=bar||||200|{"args":{"foo":"bar"}}|smoke,api
-2|0|POST表单|POST|{{base_url}}/post|{}||foo=bar|||200|{"form":{"foo":"bar"}}|api
-3|0|检查JSON响应|GET|{{base_url}}/json|{}|||||200|{"slideshow":{"author":"Yours Truly"}}|json
-4|1|这个用例被跳过|GET|{{base_url}}/status/404|{}|||||200|{}|skip
-5|0|状态码错误演示|GET|{{base_url}}/status/418|{}|||||200|{}|error,negative
-6|0|内容不匹配演示|GET|{{base_url}}/ip|{}|||||200|{"origin":"1.2.3.4"}|negative,api
-7|0|POST JSON|POST|{{base_url}}/post|{}|||{"foo":"bar"}||200|{"json":{"foo":"bar"}}|json
-8|0|POST原始BODY|POST|{{base_url}}/post|{"Content-Type":"text/plain"}||||raw text|200|{"data":"raw text"}|api
