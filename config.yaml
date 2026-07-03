@@ -1,4 +1,4 @@
-base_url: https://httpbin.org
+base_url: http://localhost:8080
 log_level: debug
 timeout: 30000
 pool_size: 1

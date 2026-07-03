@@ -1,5 +1,5 @@
 import std/[json, os, parseopt, sequtils, strutils, sugar, tables, terminal, times]
-import pipetpkg/[core, report, logger]
+import pipetpkg/[core, report, logger, executor]
 
 proc resolveConfigFile(userPath: string): string =
   if userPath.len > 0:
@@ -122,8 +122,17 @@ proc main() =
   echo "║              pipet 接口测试                          ║"
   echo "╚══════════════════════════════════════════════════════╝\n"
 
+  let baseConditions = loadConditions("base_conditions.psv", vars)
+
   for f in dataFiles:
     var fileVars = vars
+    var conditions = initTable[string, Condition]()
+    for id, c in baseConditions:
+      conditions[id] = c
+    let localCondFile = parentDir(f) / "base_conditions.psv"
+    if localCondFile != "base_conditions.psv" and fileExists(localCondFile):
+      for id, c in loadConditions(localCondFile, fileVars):
+        conditions[id] = c
     var fileCases = loadCases(f, fileVars)
     if fileCases.len == 0:
       continue
@@ -139,47 +148,105 @@ proc main() =
     var fileResults: seq[TestResult]
 
     for tc in fileCases:
+      let preList = tc.pre.join(";")
+      let postList = tc.post.join(";")
+
       if tc.skip:
         gLogger.info("跳过用例", {"id": tc.id, "desc": tc.desc}.toTable)
+        let (skipUrl, skipHeaders, skipBody) = formatRequestInfo(resolveTestCase(tc, fileVars))
         fileResults.add TestResult(
-          id: tc.id, desc: tc.desc, status: "SKIP", durationSec: 0.0,
+          id: tc.id, desc: tc.desc, httpMethod: tc.httpMethod, url: skipUrl,
+          requestHeaders: skipHeaders, requestBody: skipBody, status: "SKIP", durationSec: 0.0,
           expectStatus: tc.expectStatus, actualStatus: 0, diff: "",
           actualBody: "",
           expectBody: $tc.expectBody,
-          tags: tc.tags.join(",")
+          tags: tc.tags.join(","), preConditions: preList, postConditions: postList, extractedVars: ""
         )
         styledEcho styleDim, "    [", tc.id, "] ", tc.desc, " ... SKIP"
+        continue
+
+      var preDiffs: seq[string]
+      for cid in tc.pre:
+        if not conditions.hasKey(cid):
+          gLogger.warn("前置条件不存在", {"id": tc.id, "condition": cid}.toTable)
+          preDiffs.add("pre[" & cid & "]: 条件不存在")
+          continue
+        let resolvedCond = resolveCondition(conditions[cid], fileVars)
+        gLogger.debug("执行前置条件", {"id": tc.id, "condition": cid}.toTable)
+        stdout.write "    [" & tc.id & "] pre:" & cid & " ... "
+        let rc = runCondition(resolvedCond, pool, fileVars)
+        if rc.ok:
+          styledEcho fgGreen, "OK", resetStyle
+        else:
+          styledEcho fgRed, "FAIL", resetStyle, " (" & rc.diff & ")"
+          preDiffs.add("pre[" & cid & "]: " & rc.diff)
+      if preDiffs.len > 0:
+        let (reqUrl, reqHeaders, reqBody) = formatRequestInfo(resolveTestCase(tc, fileVars))
+        fileResults.add TestResult(
+          id: tc.id, desc: tc.desc, httpMethod: tc.httpMethod, url: reqUrl,
+          requestHeaders: reqHeaders, requestBody: reqBody, status: "FAIL", durationSec: 0.0,
+          expectStatus: tc.expectStatus, actualStatus: 0,
+          diff: preDiffs.join(" | "), actualBody: "", expectBody: $tc.expectBody,
+          tags: tc.tags.join(","), preConditions: preList, postConditions: postList, extractedVars: ""
+        )
         continue
 
       let resolvedTc = resolveTestCase(tc, fileVars)
       gLogger.debug("开始执行用例", {"id": tc.id, "method": resolvedTc.httpMethod, "url": resolvedTc.url, "stream_mode": $resolvedTc.streamMode}.toTable)
       stdout.write "    [" & tc.id & "] " & tc.desc & " ... "
       let r = if resolvedTc.streamMode: runStreamTest(resolvedTc, pool) else: runTest(resolvedTc, pool, retryCount, retryDelayMs)
-      fileResults.add(r)
 
-      let durationStr = formatFloat(r.durationSec, ffDecimal, 3) & "s"
-      gLogger.debug("用例执行完成", {"id": r.id, "status": r.status, "duration_s": durationStr}.toTable)
-      case r.status
+      var extractedVars: seq[string]
+      if r.status == "PASS":
+        let extracted = extractVars(r.actualBody, tc.extract)
+        for k, v in extracted:
+          fileVars[k] = v
+          extractedVars.add(k & "=" & v)
+          gLogger.info("提取上下文变量", {"key": k, "value": v}.toTable)
+
+      var postDiffs: seq[string]
+      for cid in tc.post:
+        if not conditions.hasKey(cid):
+          gLogger.warn("后置条件不存在", {"id": tc.id, "condition": cid}.toTable)
+          postDiffs.add("post[" & cid & "]: 条件不存在")
+          continue
+        let resolvedCond = resolveCondition(conditions[cid], fileVars)
+        gLogger.debug("执行后置条件", {"id": tc.id, "condition": cid}.toTable)
+        stdout.write "    [" & tc.id & "] post:" & cid & " ... "
+        let rc = runCondition(resolvedCond, pool, fileVars)
+        if rc.ok:
+          styledEcho fgGreen, "OK", resetStyle
+        else:
+          styledEcho fgRed, "FAIL", resetStyle, " (" & rc.diff & ")"
+          postDiffs.add("post[" & cid & "]: " & rc.diff)
+
+      var finalR = r
+      finalR.preConditions = preList
+      finalR.postConditions = postList
+      finalR.extractedVars = extractedVars.join(";")
+      if postDiffs.len > 0:
+        finalR.status = "FAIL"
+        finalR.diff = (if finalR.diff.len > 0: finalR.diff & " | " else: "") & postDiffs.join(" | ")
+      fileResults.add(finalR)
+
+      let durationStr = formatFloat(finalR.durationSec, ffDecimal, 3) & "s"
+      gLogger.debug("用例执行完成", {"id": finalR.id, "status": finalR.status, "duration_s": durationStr}.toTable)
+      case finalR.status
       of "PASS":
         styledEcho fgGreen, "PASS", resetStyle, " (" & durationStr & ")"
-        if tc.extract.len > 0:
-          let extracted = extractVars(r.actualBody, tc.extract)
-          for k, v in extracted:
-            fileVars[k] = v
-            gLogger.info("提取上下文变量", {"key": k, "value": v}.toTable)
       of "FAIL":
         styledEcho fgRed, "FAIL", resetStyle, " (" & durationStr & ")"
-        if r.diff.len > 80:
-          echo "         " & r.diff[0..79] & "..."
+        if finalR.diff.len > 80:
+          echo "         " & finalR.diff[0..79] & "..."
         else:
-          echo "         " & r.diff
+          echo "         " & finalR.diff
       else:
         discard
 
     allResults.add(fileResults)
 
   let results = allResults
-  gLogger.info("用例加载完成", {"total_cases": $results.len, "data_files": dataFiles.join(", ")}.toTable)
+  gLogger.info("测试执行完成", {"total_cases": $results.len, "data_files": dataFiles.join(", ")}.toTable)
   if results.len == 0:
     echo "\n没有加载到测试用例"
     return

@@ -7,6 +7,22 @@ type
     maxWaitMs*: int
     minChunks*: int
 
+  Condition* = object
+    id*: string
+    typ*: string
+    desc*: string
+    httpMethod*: string
+    url*: string
+    headers*: Table[string, string]
+    payload*: string
+    params*: string
+    form*: string
+    json*: string
+    body*: string
+    expectStatus*: int
+    extract*: Table[string, string]
+    tags*: seq[string]
+
   TestCase* = object
     id*: string
     desc*: string
@@ -26,10 +42,16 @@ type
     streamMode*: bool
     streamAsserts*: seq[StreamAssert]
     matchMode*: string
+    pre*: seq[string]
+    post*: seq[string]
 
   TestResult* = object
     id*: string
     desc*: string
+    httpMethod*: string
+    url*: string
+    requestHeaders*: string
+    requestBody*: string
     status*: string
     durationSec*: float
     expectStatus*: int
@@ -38,6 +60,9 @@ type
     actualBody*: string
     expectBody*: string
     tags*: string
+    preConditions*: string
+    postConditions*: string
+    extractedVars*: string
 
   HttpClientPool* = ref object
     maxSize*: int

@@ -1,0 +1,2 @@
+id|desc|method|url|expected_status|expected_body
+basic_01|Basic 认证成功|GET|{{base_url}}/api/auth/basic|200|{"user":"admin","pass":"admin","auth":"basic"}

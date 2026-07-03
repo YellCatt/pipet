@@ -1,0 +1,9 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|match_mode
+# 基础冒烟测试：简单 JSON、HTTP 方法、请求回显、查询参数
+json_01|0|返回简单 JSON|GET|{{base_url}}/api/json|{}|||||200|{"msg":"纯标准库","time":"2026-06-09","framework":"Nim stdlib"}|smoke,api|exact
+method_01|0|GET 方法回显|GET|{{base_url}}/api/method|{}|||||200|{"method":"GET","path":"/api/method","ok":true}|smoke,api|exact
+method_02|0|POST 方法回显|POST|{{base_url}}/api/method|{}|||||200|{"method":"POST","path":"/api/method","ok":true}|api|exact
+echo_01|0|GET 回显带查询参数|GET|{{base_url}}/api/echo|{}|foo=bar||||200|{"method":"GET","path":"/api/echo","query":{"foo":"bar"}}|api|subset
+echo_02|0|POST 回显原始 Body|POST|{{base_url}}/api/echo|{}||||raw text|200|{"method":"POST","path":"/api/echo","body":"raw text"}|api|subset
+query_01|0|查询参数解析|GET|{{base_url}}/api/query|{}|foo=bar&baz=1||||200|{"query":{"foo":"bar","baz":"1"},"count":2}|api|exact
+status_01|0|自定义 201 状态码|GET|{{base_url}}/api/status/201|{}|||||201|{"code":201,"status":"custom"}|api|exact

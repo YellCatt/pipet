@@ -45,7 +45,7 @@ proc isRegexMarker(s: string): bool =
 proc isSkipMarker(s: string): bool = s == "{{skip}}"
 proc isNotExistsMarker(s: string): bool = s == "{{not_exists}}"
 
-proc jsonDiff*(expect, actual: JsonNode, path: string = "", mode: string = "subset"): seq[string] =
+proc jsonDiff*(expect, actual: JsonNode, path: string = "", mode: string = "exact"): seq[string] =
   gLogger.debug("JSON 对比", {"path": if path.len == 0: "(root)" else: path, "expect_kind": $expect.kind, "actual_kind": $actual.kind, "mode": mode}.toTable)
   let mode = mode.toLowerAscii()
 

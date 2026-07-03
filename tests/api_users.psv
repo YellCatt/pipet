@@ -1,0 +1,9 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract|match_mode
+# 用户 CRUD 链式测试：创建 -> 读取 -> 更新 -> 部分更新 -> 删除
+user_01|0|创建用户|POST|{{base_url}}/api/users|{}|||{"name":"Alice"}||201|{"id":"{{skip}}","created":{"name":"Alice"}}|api,crud|{"userId":"id"}|subset
+user_02|0|读取用户|GET|{{base_url}}/api/users/{{userId}}|{}|||||200|{"data":{"name":"Alice"}}|api,crud||subset
+user_03|0|覆盖更新用户|PUT|{{base_url}}/api/users/{{userId}}|{}|||{"name":"Bob"}||200|{"updated":{"name":"Bob"}}|api,crud||subset
+user_04|0|部分更新用户|PATCH|{{base_url}}/api/users/{{userId}}|{}|||{"age":30}||200|{"patched":{"name":"Bob","age":30}}|api,crud||subset
+user_05|0|读取更新后用户|GET|{{base_url}}/api/users/{{userId}}|{}|||||200|{"data":{"name":"Bob","age":30}}|api,crud||subset
+user_06|1|删除用户（204 空响应，当前工具不支持断言）|DELETE|{{base_url}}/api/users/{{userId}}|{}|||||204|{}|api,crud||subset
+user_07|0|查询不存在的用户|GET|{{base_url}}/api/users/9999|{}|||||404|{"error":"User not found"}|api,negative|exact

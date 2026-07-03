@@ -57,3 +57,23 @@ proc selectRequestBody*(tc: TestCase): tuple[body: string, contentType: string, 
     return (tc.payload, "", nil)
   gLogger.debug("请求体为空")
   return ("", "", nil)
+
+proc selectConditionBody*(c: Condition): tuple[body: string, contentType: string, multipart: MultipartData] =
+  let (textFields, fileFields) = splitFormFields(c.form)
+  if fileFields.len > 0:
+    gLogger.debug("选择条件 multipart 文件请求体", {"files_count": $fileFields.len, "text_fields_count": $textFields.len}.toTable)
+    return ("", "", buildMultipartData(textFields, fileFields))
+  if c.json.len > 0:
+    gLogger.debug("选择条件 JSON 请求体", {"content_type": "application/json", "body_len": $c.json.len}.toTable)
+    return (c.json, "application/json", nil)
+  if c.form.len > 0:
+    gLogger.debug("选择条件表单请求体", {"content_type": "application/x-www-form-urlencoded", "body_len": $c.form.len}.toTable)
+    return (c.form, "application/x-www-form-urlencoded", nil)
+  if c.body.len > 0:
+    gLogger.debug("选择条件自定义请求体", {"body_len": $c.body.len}.toTable)
+    return (c.body, "", nil)
+  if c.payload.len > 0:
+    gLogger.debug("选择条件 payload 请求体", {"body_len": $c.payload.len}.toTable)
+    return (c.payload, "", nil)
+  gLogger.debug("条件请求体为空")
+  return ("", "", nil)

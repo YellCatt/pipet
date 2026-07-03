@@ -1,0 +1,9 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|match_mode
+# 认证相关接口：Basic / Bearer / API Key
+basic_01|0|Basic 认证成功|GET|{{base_url}}/api/auth/basic|{"Authorization":"Basic YWRtaW46YWRtaW4="}|||||200|{"user":"admin","pass":"admin","auth":"basic"}|auth,api|exact
+basic_02|0|Basic 认证缺失|GET|{{base_url}}/api/auth/basic|{}|||||401|{"error":"Need basic auth"}|auth,negative|exact
+bearer_01|0|Bearer 认证成功|GET|{{base_url}}/api/auth/bearer|{"Authorization":"Bearer abc123"}|||||200|{"token":"abc123","auth":"bearer"}|auth,api|exact
+bearer_02|0|Bearer 认证缺失|GET|{{base_url}}/api/auth/bearer|{}|||||401|{"error":"Need bearer token"}|auth,negative|exact
+apikey_01|0|API Key 请求头认证|GET|{{base_url}}/api/auth/apikey|{"X-Api-Key":"secret"}|||||200|{"apiKey":"secret","auth":"apikey"}|auth,api|exact
+apikey_02|0|API Key 查询参数认证|GET|{{base_url}}/api/auth/apikey|{}|api_key=secret||||200|{"apiKey":"secret","auth":"apikey","from":"query"}|auth,api|exact
+apikey_03|0|API Key 认证缺失|GET|{{base_url}}/api/auth/apikey|{}|||||401|{"error":"Need api key"}|auth,negative|exact

@@ -24,18 +24,16 @@ proc loadConfig*(filename: string): Table[string, string] =
       case val.kind
       of JString:
         result[key] = val.getStr()
-        gLogger.debug("加载配置项", {"key": key, "value": result[key]}.toTable)
       of JInt:
         result[key] = $val.getInt()
-        gLogger.debug("加载配置项", {"key": key, "value": result[key]}.toTable)
       of JFloat:
         result[key] = $val.getFloat()
-        gLogger.debug("加载配置项", {"key": key, "value": result[key]}.toTable)
       of JBool:
         result[key] = $val.getBool()
-        gLogger.debug("加载配置项", {"key": key, "value": result[key]}.toTable)
       else:
         gLogger.warn("配置项值类型不支持，已忽略", {"key": key}.toTable)
+        continue
+      gLogger.debug("加载配置项", {"key": key, "value": result[key]}.toTable)
     gLogger.info("YAML 配置加载完成", {"file": filename, "vars_count": $result.len}.toTable)
   except YamlParserError as e:
     gLogger.error("YAML 解析失败", {"error": e.msg}.toTable)

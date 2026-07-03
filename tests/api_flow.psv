@@ -1,0 +1,3 @@
+id|desc|method|url|headers|json|body|params|form|expected_status|expected_body|extract|tags|skip|stream_mode|stream_assert|match_mode|pre|post
+T1|登录流程|POST|{{base_url}}/api/login|{}|{"u":"test"}||||200|{"code":0}|token=data.token|api||0||exact|login|cleanup
+T2|查订单|GET|{{base_url}}/api/orders|{}|||uid={{uid}}||200|{"code":0}||api||0||exact|login;getUser|cleanup

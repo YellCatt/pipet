@@ -1,0 +1,14 @@
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|match_mode
+# 其它常用接口：请求头、Cookie、重定向、延迟、上传、表单、JSON Body、500 等
+headers_01|0|请求头回显|GET|{{base_url}}/api/headers|{}|||||200|{"user-agent":"{{skip}}"}|api|subset
+headers_set_01|0|设置响应头|GET|{{base_url}}/api/headers/set|{}|||||200|{"set":true}|api|exact
+path_01|0|路径参数|GET|{{base_url}}/api/path/abc123|{}|||||200|{"id":"abc123","path":"/api/path/abc123"}|api|exact
+redirect_01|0|重定向链跟随|GET|{{base_url}}/api/redirect/3|{}|||||200|{"redirectComplete":true,"total":0}|api|exact
+delay_01|0|延迟 1 秒响应|GET|{{base_url}}/api/delay/1|{}|||||200|{"delayed":1,"unit":"seconds"}|api|exact
+upload_01|0|文件上传 multipart|POST|{{base_url}}/api/upload|{}||upload=@data/upload_sample.txt|||200|{"method":"POST","contentType":"{{regex:multipart/form-data.*}}"}|api|subset
+form_01|0|表单数据提交|POST|{{base_url}}/api/form|{}||foo=bar&baz=1|||200|{"form":{"foo":"bar","baz":"1"}}|api|exact
+jsonbody_01|0|JSON Body 提交|POST|{{base_url}}/api/jsonbody|{}|||{"foo":"bar"}||200|{"received":{"foo":"bar"},"method":"POST"}|api|exact
+cookies_set_01|0|设置 Cookie|GET|{{base_url}}/api/cookies/set|{}|||||200|{"set":["test=value","session=abc123"]}|api|exact
+cookies_get_01|0|读取 Cookie|GET|{{base_url}}/api/cookies/get|{"Cookie":"test=value; session=abc123"}|||||200|{"test":"value","session":"abc123"}|api|exact
+cookies_delete_01|0|删除 Cookie|GET|{{base_url}}/api/cookies/delete|{}|||||200|{"deleted":["test","session"]}|api|exact
+error_01|0|模拟 500 错误|GET|{{base_url}}/api/500|{}|||||500|{"error":"Simulated server error"}|api,negative|exact

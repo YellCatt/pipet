@@ -8,23 +8,30 @@ proc normalizeBody(s: string): string =
     let node = parseJson(s)
     return $node
   except JsonParsingError:
-    return s.replace("\r\n", "").replace("\n", "").replace("\r", "")
+    return s.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
 proc writeRows(f: File, results: seq[TestResult]) =
-  f.writeLine "id|desc|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body"
+  f.writeLine "id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars"
 
   gLogger.debug("写入报告行", {"count": $results.len}.toTable)
   for r in results:
     let safeDiff = r.diff.replace("|", ";").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
     let safeDesc = r.desc.replace("|", ";").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
     let safeTags = r.tags.replace("|", ";").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    let safeUrl = r.url.replace("|", ";")
+    let safeReqHeaders = r.requestHeaders.replace("|", ";").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    let safeReqBody = normalizeBody(r.requestBody).replace("|", ";")
     let safeBody = normalizeBody(r.actualBody).replace("|", ";")
     let safeExpect = normalizeBody(r.expectBody).replace("|", ";")
+    let safePre = r.preConditions.replace("|", ";")
+    let safePost = r.postConditions.replace("|", ";")
+    let safeExtracted = r.extractedVars.replace("|", ";")
     let durationStr = formatFloat(r.durationSec, ffDecimal, 3)
 
-    f.writeLine r.id & "|" & safeDesc & "|" & safeTags & "|" & r.status & "|" & durationStr &
+    f.writeLine r.id & "|" & safeDesc & "|" & r.httpMethod & "|" & safeUrl & "|" & safeReqHeaders & "|" & safeReqBody &
+                "|" & safeTags & "|" & r.status & "|" & durationStr &
                 "|" & $r.expectStatus & "|" & $r.actualStatus & "|" & safeDiff & "|" & safeBody &
-                "|" & safeExpect
+                "|" & safeExpect & "|" & safePre & "|" & safePost & "|" & safeExtracted
 
 proc writePsvReport*(results: seq[TestResult], filename: string) =
   let f = open(filename, fmWrite)
