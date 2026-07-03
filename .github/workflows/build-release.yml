@@ -2,7 +2,7 @@ name: Build and Release Nim (Multi-platform + 极路由2)
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "master" ]
   workflow_dispatch:
 
 permissions:
