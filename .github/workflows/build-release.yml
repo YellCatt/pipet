@@ -1,4 +1,4 @@
-name: Build and Release Nim (Multi-platform + 极路由2)
+name: Build and Release Nim (Windows only)
 
 on:
   push:
@@ -12,28 +12,50 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: linux
-          - os: windows-latest
-            target: windows
-          - os: macos-latest
-            target: macos
-          - os: ubuntu-latest
-            target: hiwifi2
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: [Debug] 列出仓库目录结构
+        shell: pwsh
+        run: |
+          Write-Host "=== 当前工作目录 ==="
+          Get-Location
+          Write-Host ""
+          Write-Host "=== 项目根目录文件列表 ==="
+          Get-ChildItem
+          Write-Host ""
+          Write-Host "=== src 目录 ==="
+          if (Test-Path src) { Get-ChildItem src -Recurse } else { Write-Host "src 目录不存在" }
+          Write-Host ""
+          Write-Host "=== .nimble 文件内容 ==="
+          Get-Content pipet.nimble
+          Write-Host ""
 
       - name: Setup Nim
         uses: jiro4989/setup-nim-action@v2
         with:
           nim-version: '2.0.0'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: [Debug] 检查 Nim 和 Nimble 版本
+        shell: pwsh
+        run: |
+          Write-Host "=== Nim 版本 ==="
+          nim --version
+          Write-Host ""
+          Write-Host "=== Nimble 版本 ==="
+          nimble --version
+          Write-Host ""
+          Write-Host "=== PATH 环境变量 ==="
+          $env:PATH -split ';'
+          Write-Host ""
+          Write-Host "=== 确认 nimble.exe 位置 ==="
+          Get-Command nimble | Format-List
+          Write-Host ""
 
       - name: Cache Nimble packages
         uses: actions/cache@v4
@@ -44,99 +66,104 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nimble-v2-
 
-      - name: Build (Linux)
-        if: matrix.target == 'linux'
-        run: |
-          set -e
-          nimble build -d:release --verbose
-          cp dist/pipet/pipet pipet-linux
-          tar czvf pipet-linux.tar.gz pipet-linux
-
-      - name: Build (Windows)
-        if: matrix.target == 'windows'
+      - name: [Debug] 列出 ~/.nimble 目录
         shell: pwsh
         run: |
+          $nimblePath = "$env:USERPROFILE\.nimble"
+          Write-Host "Nimble 路径: $nimblePath"
+          if (Test-Path $nimblePath) {
+            Write-Host ""
+            Write-Host "=== .nimble 目录内容 ==="
+            Get-ChildItem $nimblePath
+            Write-Host ""
+            Write-Host "=== .nimble/pkgs 目录 ==="
+            if (Test-Path "$nimblePath\pkgs") {
+              Get-ChildItem "$nimblePath\pkgs"
+            }
+          } else {
+            Write-Host ".nimble 目录不存在（首次运行）"
+          }
+
+      - name: Nimble install dependencies
+        shell: pwsh
+        run: |
+          Write-Host "=== 执行 nimble install -y ==="
+          nimble install -y
+          Write-Host ""
+          Write-Host "=== 安装后目录 ==="
+          Get-ChildItem
+
+      - name: Build (Windows)
+        shell: pwsh
+        run: |
+          Write-Host "=== 构建前当前目录 ==="
+          Get-Location
+          Write-Host ""
+          Write-Host "=== 执行 nimble build -d:release --verbose ==="
           nimble build -d:release --verbose
-          Rename-Item -Path .\dist\pipet\pipet.exe -NewName pipet-windows.exe
-          Compress-Archive -Path .\pipet-windows.exe -DestinationPath pipet-windows.zip
+          Write-Host ""
+          Write-Host "=== 构建退出码: $LASTEXITCODE ==="
 
-      - name: Build (macOS)
-        if: matrix.target == 'macos'
+      - name: [Debug] 列出构建后的目录结构
+        shell: pwsh
         run: |
-          set -e
-          nimble build -d:release --verbose
-          cp dist/pipet/pipet pipet-macos
-          tar czvf pipet-macos.tar.gz pipet-macos
+          Write-Host "=== 构建后根目录 ==="
+          Get-ChildItem
+          Write-Host ""
+          Write-Host "=== dist 目录（如果存在） ==="
+          if (Test-Path dist) {
+            Get-ChildItem dist -Recurse
+          } else {
+            Write-Host "dist 目录不存在"
+          }
+          Write-Host ""
+          Write-Host "=== bin 目录（如果存在） ==="
+          if (Test-Path bin) {
+            Get-ChildItem bin -Recurse
+          } else {
+            Write-Host "bin 目录不存在"
+          }
+          Write-Host ""
+          Write-Host "=== 检查所有 .exe 文件 ==="
+          Get-ChildItem -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+          Write-Host ""
+          Write-Host "=== 检查所有 pipet* 文件 ==="
+          Get-ChildItem -Filter "pipet*" -Recurse -ErrorAction SilentlyContinue
 
-      - name: Install OpenWrt SDK (mt7620)
-        if: matrix.target == 'hiwifi2'
+      - name: Package artifact (Windows)
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xz-utils wget
-          wget -q https://downloads.openwrt.org/releases/23.05.3/targets/ramips/mt7620/openwrt-sdk-23.05.3-ramips-mt7620_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-          mkdir -p openwrt-sdk
-          tar xf openwrt-sdk-*.tar.xz -C openwrt-sdk --strip-components=1
-          TOOLCHAIN_DIR=$(find openwrt-sdk/staging_dir -name "toolchain-*" -type d | head -1)
-          echo "$PWD/$TOOLCHAIN_DIR/bin" >> $GITHUB_PATH
-          echo "STAGING_DIR=$PWD/openwrt-sdk/staging_dir" >> $GITHUB_ENV
+          Write-Host "=== 寻找 pipet.exe ==="
+          $srcPath = ".\dist\pipet\pipet.exe"
+          $altPath1 = ".\pipet.exe"
+          $altPath2 = ".\bin\pipet.exe"
 
-      - name: Build (极路由2 - 静态链接)
-        if: matrix.target == 'hiwifi2'
-        run: |
-          set -e
-          export CC=mipsel-openwrt-linux-musl-gcc
-          export CXX=mipsel-openwrt-linux-musl-g++
-          nimble build \
-            --cpu:mipsel \
-            --os:linux \
-            --cc:gcc \
-            --gcc.exe:mipsel-openwrt-linux-musl-gcc \
-            --gcc.linkerexe:mipsel-openwrt-linux-musl-gcc \
-            --passC:-O2 \
-            --passC:-EL \
-            --passC:-msoft-float \
-            --passC:-static \
-            --passL:-static \
-            --passL:-lpthread \
-            --passL:-ldl \
-            -d:release \
-            --mm:arc \
-            --threads:off \
-            -y
-          cp bin/pipet pipet-hiwifi2 || cp dist/pipet/pipet pipet-hiwifi2 || cp pipet pipet-hiwifi2
-          file pipet-hiwifi2
-          tar czvf pipet-hiwifi2.tar.gz pipet-hiwifi2
+          $foundPath = $null
+          if (Test-Path $srcPath) { $foundPath = $srcPath }
+          elseif (Test-Path $altPath1) { $foundPath = $altPath1 }
+          elseif (Test-Path $altPath2) { $foundPath = $altPath2 }
+
+          if ($foundPath) {
+            Write-Host "找到: $foundPath"
+            Copy-Item -Path $foundPath -Destination ".\pipet-windows.exe"
+            Write-Host "=== 检查复制后的文件 ==="
+            Get-Item pipet-windows.exe | Format-List
+            Write-Host ""
+            Write-Host "=== 创建压缩包 ==="
+            Compress-Archive -Path .\pipet-windows.exe -DestinationPath pipet-windows.zip -Force
+            Write-Host "=== 压缩包内容 ==="
+            Get-Item pipet-windows.zip | Format-List
+          } else {
+            Write-Host "ERROR: 没有找到 pipet.exe"
+            Write-Host "尝试路径:"
+            Write-Host "  - $srcPath"
+            Write-Host "  - $altPath1"
+            Write-Host "  - $altPath2"
+            exit 1
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pipet-${{ matrix.target }}
-          path: |
-            pipet-*.tar.gz
-            pipet-*.zip
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: List downloaded artifacts
-        run: ls -la artifacts/
-
-      - name: Create Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="v$(date +%Y%m%d-%H%M%S)"
-          gh release create "$VERSION" \
-            --title "Release $VERSION" \
-            --notes "多平台自动构建（含极路由2 - 静态链接）" \
-            artifacts/*
+          name: pipet-windows
+          path: pipet-windows.zip
