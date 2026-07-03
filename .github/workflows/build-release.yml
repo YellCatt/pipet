@@ -2,11 +2,14 @@ name: Build and Release Nim (Multi-platform + 极路由2)
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
 
 jobs:
   build:
@@ -100,7 +103,7 @@ jobs:
             --mm:arc \
             --threads:off \
             -y
-          cp dist/pipet/pipet pipet-hiwifi2 || cp pipet pipet-hiwifi2
+          cp bin/pipet pipet-hiwifi2 || cp dist/pipet/pipet pipet-hiwifi2 || cp pipet pipet-hiwifi2
           file pipet-hiwifi2
           tar czvf pipet-hiwifi2.tar.gz pipet-hiwifi2
 
