@@ -19,7 +19,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: [Debug] 列出仓库目录结构
+      - name: 'Debug: 列出仓库目录结构'
         shell: pwsh
         run: |
           Write-Host "=== 当前工作目录 ==="
@@ -41,7 +41,7 @@ jobs:
           nim-version: '2.0.0'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: [Debug] 检查 Nim 和 Nimble 版本
+      - name: 'Debug: 检查 Nim 和 Nimble 版本'
         shell: pwsh
         run: |
           Write-Host "=== Nim 版本 ==="
@@ -66,7 +66,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nimble-v2-
 
-      - name: [Debug] 列出 ~/.nimble 目录
+      - name: 'Debug: 列出 ~/.nimble 目录'
         shell: pwsh
         run: |
           $nimblePath = "$env:USERPROFILE\.nimble"
@@ -104,7 +104,7 @@ jobs:
           Write-Host ""
           Write-Host "=== 构建退出码: $LASTEXITCODE ==="
 
-      - name: [Debug] 列出构建后的目录结构
+      - name: 'Debug: 列出构建后的目录结构'
         shell: pwsh
         run: |
           Write-Host "=== 构建后根目录 ==="
