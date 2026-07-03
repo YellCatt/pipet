@@ -1,0 +1,139 @@
+name: Build and Release Nim (Multi-platform + 极路由2)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+          - os: ubuntu-latest
+            target: hiwifi2
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: '2.0.0'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Nimble packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.nimble
+          key: ${{ runner.os }}-nimble-v2-${{ hashFiles('**/*.nimble', '**/*.nim') }}
+          restore-keys: |
+            ${{ runner.os }}-nimble-v2-
+
+      - name: Build (Linux)
+        if: matrix.target == 'linux'
+        run: |
+          set -e
+          nimble build -d:release --verbose
+          cp dist/pipet/pipet pipet-linux
+          tar czvf pipet-linux.tar.gz pipet-linux
+
+      - name: Build (Windows)
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: |
+          nimble build -d:release --verbose
+          Rename-Item -Path .\dist\pipet\pipet.exe -NewName pipet-windows.exe
+          Compress-Archive -Path .\pipet-windows.exe -DestinationPath pipet-windows.zip
+
+      - name: Build (macOS)
+        if: matrix.target == 'macos'
+        run: |
+          set -e
+          nimble build -d:release --verbose
+          cp dist/pipet/pipet pipet-macos
+          tar czvf pipet-macos.tar.gz pipet-macos
+
+      - name: Install OpenWrt SDK (mt7620)
+        if: matrix.target == 'hiwifi2'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xz-utils wget
+          wget -q https://downloads.openwrt.org/releases/23.05.3/targets/ramips/mt7620/openwrt-sdk-23.05.3-ramips-mt7620_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          mkdir -p openwrt-sdk
+          tar xf openwrt-sdk-*.tar.xz -C openwrt-sdk --strip-components=1
+          TOOLCHAIN_DIR=$(find openwrt-sdk/staging_dir -name "toolchain-*" -type d | head -1)
+          echo "$PWD/$TOOLCHAIN_DIR/bin" >> $GITHUB_PATH
+          echo "STAGING_DIR=$PWD/openwrt-sdk/staging_dir" >> $GITHUB_ENV
+
+      - name: Build (极路由2 - 静态链接)
+        if: matrix.target == 'hiwifi2'
+        run: |
+          set -e
+          export CC=mipsel-openwrt-linux-musl-gcc
+          export CXX=mipsel-openwrt-linux-musl-g++
+          nimble build \
+            --cpu:mipsel \
+            --os:linux \
+            --cc:gcc \
+            --gcc.exe:mipsel-openwrt-linux-musl-gcc \
+            --gcc.linkerexe:mipsel-openwrt-linux-musl-gcc \
+            --passC:-O2 \
+            --passC:-EL \
+            --passC:-msoft-float \
+            --passC:-static \
+            --passL:-static \
+            --passL:-lpthread \
+            --passL:-ldl \
+            -d:release \
+            --mm:arc \
+            --threads:off \
+            -y
+          cp dist/pipet/pipet pipet-hiwifi2 || cp pipet pipet-hiwifi2
+          file pipet-hiwifi2
+          tar czvf pipet-hiwifi2.tar.gz pipet-hiwifi2
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipet-${{ matrix.target }}
+          path: |
+            pipet-*.tar.gz
+            pipet-*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: ls -la artifacts/
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v$(date +%Y%m%d-%H%M%S)"
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --notes "多平台自动构建（含极路由2 - 静态链接）" \
+            artifacts/*
