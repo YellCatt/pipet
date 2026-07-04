@@ -94,8 +94,8 @@ proc jsonDiff*(expect, actual: JsonNode, path: string = "", mode: string = "exac
       let pattern = extractRegexMarker(expectStr)
       gLogger.debug("正则断言", {"path": if path.len == 0: "(root)" else: path, "pattern": pattern}.toTable)
       try:
-        let regex = re(pattern)
-        if regex.find(actual.getStr()).isNone:
+        let regex = re2(pattern)
+        if not actual.getStr().contains(regex):
           result.add(path & ": 正则匹配失败，模式 \"" & pattern & "\"，实际 \"" & actual.getStr() & "\"")
       except CatchableError as e:
         result.add(path & ": 正则表达式无效: " & pattern & "，错误: " & e.msg)

@@ -315,7 +315,7 @@ proc evalStreamAssert(sa: StreamAssert; aggregatedContent: string; node: JsonNod
     return sa.pattern in aggregatedContent
   of "regex":
     try:
-      return re(sa.pattern).find(aggregatedContent).isSome
+      return aggregatedContent.contains(re2(sa.pattern))
     except CatchableError:
       return false
   of "json_path":
