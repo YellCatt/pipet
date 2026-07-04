@@ -1,10 +1,23 @@
-import std/[httpclient, httpcore, json, os, re, strutils, tables, times]
+import std/[httpclient, httpcore, json, os, re, strutils, tables, times, uri]
 
 import logger, types, pool, request, jsonutils
+
+proc checkHttpsSupport*(url: string): string =
+  ## 检测 URL 是否使用 HTTPS，如果是则返回错误提示（当前编译不支持 HTTPS）
+  let u = parseUri(url)
+  if u.scheme == "https":
+    return "当前编译未启用 OpenSSL 支持，无法请求 HTTPS 接口。如需 HTTPS 支持，请在系统安装 libssl/libcrypto 后重新编译（启用 --define:ssl），或改用 HTTP 接口测试。"
+  return ""
 
 proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retryDelayMs: int): tuple[status: int, body: string, durationSec: float, error: string] =
   let start = epochTime()
   let url = buildUrl(tc.url, tc.params)
+
+  let httpsErr = checkHttpsSupport(url)
+  if httpsErr.len > 0:
+    gLogger.error("HTTPS 不支持", {"id": tc.id, "url": url}.toTable)
+    return (status: 0, body: "N/A", durationSec: 0.0, error: httpsErr)
+
   let (reqBody, contentType, multipart) = selectRequestBody(tc)
 
   gLogger.debug("准备发送 HTTP 请求", {
@@ -96,6 +109,12 @@ proc formatConditionInfo*(c: Condition): tuple[url: string, headers: string, bod
 proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status: int, body: string, durationSec: float, error: string] =
   let start = epochTime()
   let url = buildUrl(c.url, c.params)
+
+  let httpsErr = checkHttpsSupport(url)
+  if httpsErr.len > 0:
+    gLogger.error("HTTPS 不支持", {"id": c.id, "url": url}.toTable)
+    return (status: 0, body: "N/A", durationSec: 0.0, error: httpsErr)
+
   let (reqBody, contentType, multipart) = selectConditionBody(c)
 
   gLogger.debug("准备发送条件 HTTP 请求", {

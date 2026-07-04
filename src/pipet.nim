@@ -102,7 +102,9 @@ proc main() =
     vars = initTable[string, string]()
 
   if not vars.hasKey("base_url"):
-    vars["base_url"] = "https://httpbin.org"
+    vars["base_url"] = "http://localhost:8080"
+    gLogger.warn("未配置 base_url，使用默认值 http://localhost:8080", initTable[string, string]())
+    gLogger.info("提示：当前编译未启用 OpenSSL，仅支持 HTTP 接口测试", initTable[string, string]())
 
   let timeout = getIntConfig(vars, "timeout", 30000, 0)
   let poolSize = getIntConfig(vars, "pool_size", 1, 1)
