@@ -1,4 +1,5 @@
-import std/[httpclient, httpcore, json, os, nre, strutils, tables, times, uri]
+import std/[httpclient, httpcore, json, os, strutils, tables, times, uri]
+import regex
 
 import logger, types, pool, request, jsonutils
 
@@ -314,7 +315,7 @@ proc evalStreamAssert(sa: StreamAssert; aggregatedContent: string; node: JsonNod
     return sa.pattern in aggregatedContent
   of "regex":
     try:
-      return aggregatedContent.contains(re(sa.pattern))
+      return re(sa.pattern).find(aggregatedContent).isSome
     except CatchableError:
       return false
   of "json_path":

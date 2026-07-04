@@ -4,14 +4,15 @@ description   = "A simple PSV-based API testing tool"
 license       = "MIT"
 srcDir        = "src"
 
-requires "nim >= 1.6.0"
+requires "nim >= 2.0.0"
 requires "yaml >= 2.0.0"
+requires "regex >= 0.1.0"
 
 bin = @["pipet"]
 binDir = "dist/pipet"
 
 task release, "Build release binary (fully static, no external .so/.dll)":
-  exec "nim c --nimcache:releasecache -d:release --opt:size --dynlibOverride:pcre --dynlibOverride:ssl --dynlibOverride:crypto -o:dist/pipet/pipet.exe src/pipet.nim"
+  exec "nim c --nimcache:releasecache -d:release --opt:size --dynlibOverride:ssl --dynlibOverride:crypto -o:dist/pipet/pipet.exe src/pipet.nim"
 
 task package, "Package exe and resources into dist/pipet":
   rmDir "dist"
