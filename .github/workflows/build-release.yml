@@ -16,34 +16,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            target: linux
-            arch: amd64
-            suffix: linux-amd64
-          - os: ubuntu-latest
-            target: linux
-            arch: arm64
-            suffix: linux-arm64
-            cross: true
-            toolchainPkg: gcc-aarch64-linux-gnu
-            crossPrefix: aarch64-linux-gnu
           - os: windows-latest
             target: windows
             arch: amd64
             suffix: windows-amd64
-          - os: macos-13
-            target: macos
-            arch: amd64
-            suffix: macos-amd64
-          - os: macos-latest
-            target: macos
-            arch: arm64
-            suffix: macos-arm64
-          - os: ubuntu-latest
-            target: hiwifi2
-            arch: mipsel
-            suffix: hiwifi2
-            cross: true
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -470,5 +446,5 @@ jobs:
           VERSION="v$(date +%Y%m%d-%H%M%S)"
           gh release create "$VERSION" \
             --title "Release $VERSION" \
-            --notes "多平台/多 CPU 自动构建：linux-amd64、linux-arm64、windows-amd64、macos-amd64、macos-arm64、hiwifi2（mipsel 静态链接）" \
+            --notes "Windows amd64 自动构建" \
             artifacts/*
