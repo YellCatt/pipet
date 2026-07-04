@@ -10,8 +10,8 @@ requires "yaml >= 2.0.0"
 bin = @["pipet"]
 binDir = "dist/pipet"
 
-task release, "Build release binary":
-  exec "nim c --nimcache:releasecache -d:release --opt:size -o:dist/pipet/pipet.exe src/pipet.nim"
+task release, "Build release binary (fully static, no external .so/.dll)":
+  exec "nim c --nimcache:releasecache -d:release --opt:size --dynlibOverride:pcre --dynlibOverride:ssl --dynlibOverride:crypto -o:dist/pipet/pipet.exe src/pipet.nim"
 
 task package, "Package exe and resources into dist/pipet":
   rmDir "dist"

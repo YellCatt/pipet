@@ -131,8 +131,15 @@ jobs:
         shell: bash
         run: |
           set -e
-          echo "=== 执行 nimble build -d:release --verbose ==="
-          nimble build -d:release --verbose
+          echo "=== 执行 nimble build -d:release --verbose (全静态) ==="
+          nimble build \
+            -d:release \
+            --passC:-static \
+            --passL:-static \
+            --dynlibOverride:pcre \
+            --dynlibOverride:ssl \
+            --dynlibOverride:crypto \
+            --verbose
           echo ""
           echo "=== 构建后根目录 ==="
           ls -la
@@ -183,8 +190,8 @@ jobs:
         if: matrix.target == 'windows'
         shell: pwsh
         run: |
-          Write-Host "=== 执行 nimble build -d:release --verbose ==="
-          nimble build -d:release --verbose
+          Write-Host "=== 执行 nimble build -d:release (全静态) ==="
+          nimble build -d:release --dynlibOverride:pcre --dynlibOverride:ssl --dynlibOverride:crypto --verbose
           Write-Host ""
           Write-Host "=== 构建退出码: $LASTEXITCODE ==="
           Write-Host ""
@@ -239,8 +246,13 @@ jobs:
         shell: bash
         run: |
           set -e
-          echo "=== 执行 nimble build -d:release --verbose ==="
-          nimble build -d:release --verbose
+          echo "=== 执行 nimble build -d:release (全静态) ==="
+          nimble build \
+            -d:release \
+            --dynlibOverride:pcre \
+            --dynlibOverride:ssl \
+            --dynlibOverride:crypto \
+            --verbose
           echo ""
           echo "=== 构建后根目录 ==="
           ls -la
