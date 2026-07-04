@@ -32,6 +32,14 @@ proc newLogger*(level: LogLevel = llInfo; outStream: File = stderr): Logger =
 
 var gLogger* = newLogger()
 
+proc chinaNow(): DateTime =
+  ## 返回东八区（UTC+8）当前时间。
+  now().utc + initTimeInterval(hours = 8)
+
+proc formatChinaTime*(dt: DateTime): string =
+  ## 将时间格式化为东八区 ISO 8601 字符串。
+  dt.format("yyyy-MM-dd'T'HH:mm:ss'.'fff") & "+08:00"
+
 proc openLogFile*(logger: Logger; dir: string = "logs"; filename: string = "") =
   ## 打开日志文件，日志会同时输出到 stderr 和该文件。
   ## 如果已打开旧文件，会先关闭。
@@ -41,7 +49,7 @@ proc openLogFile*(logger: Logger; dir: string = "logs"; filename: string = "") =
     except CatchableError:
       discard
   createDir(dir)
-  let name = if filename.len > 0: filename else: "pipet_" & now().format("yyyyMMdd'_'HHmmss") & ".log"
+  let name = if filename.len > 0: filename else: "pipet_" & chinaNow().format("yyyyMMdd'_'HHmmss") & ".log"
   let path = dir / name
   logger.fileStream = open(path, fmWrite)
 
@@ -56,7 +64,7 @@ proc log*(logger: Logger; level: LogLevel; message: string;
     return
 
   var entry = newJObject()
-  entry["timestamp"] = % now().format("yyyy-MM-dd'T'HH:mm:ss'.'fffzzz")
+  entry["timestamp"] = % formatChinaTime(chinaNow())
   entry["level"] = % $level
   entry["message"] = % message
 
