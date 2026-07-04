@@ -1,4 +1,0 @@
-id|type|desc|method|url|headers|json|body|expected_status|extract|tags
-login|pre|登录|POST|{{base_url}}/api/login|{}|{"u":"test"}||200|token=data.token|
-getUser|pre|取用户信息|GET|{{base_url}}/api/user/{{token}}|{}|||200|uid=data.id|
-cleanup|post|清理|POST|{{base_url}}/api/del|{}|{"id":"{{uid}}"}||200||

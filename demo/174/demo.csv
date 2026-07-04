@@ -1,0 +1,4 @@
+id|desc|method|url|expected_status|expected_body
+basic_01|Basic 认证成功|GET|{{base_url}}/api/users|200|[{"id":1,"name":"Alice"}]
+basic_02|Basic 认证成功|GET|{{base_url}}/api/users|200
+basic_03|Basic 认证成功|GET|{{base_url}}/api/users|404

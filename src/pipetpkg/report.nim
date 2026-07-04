@@ -22,7 +22,11 @@ proc writeRows(f: File, results: seq[TestResult]) =
     let safeReqHeaders = r.requestHeaders.replace("|", ";").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
     let safeReqBody = normalizeBody(r.requestBody).replace("|", ";")
     let safeBody = normalizeBody(r.actualBody).replace("|", ";")
-    let safeExpect = normalizeBody(r.expectBody).replace("|", ";")
+    let safeExpect =
+      if r.expectBody == "null":
+        ""
+      else:
+        normalizeBody(r.expectBody).replace("|", ";")
     let safePre = r.preConditions.replace("|", ";")
     let safePost = r.postConditions.replace("|", ";")
     let safeExtracted = r.extractedVars.replace("|", ";")
