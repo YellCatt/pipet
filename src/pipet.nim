@@ -61,6 +61,33 @@ proc getIntConfig(vars: Table[string, string], key: string, defaultValue: int, m
     except ValueError:
       gLogger.warn("配置项不是有效整数，已使用默认值", {"key": key, "value": vars[key], "default": $defaultValue}.toTable)
 
+proc parseOffsetMinutes(s: string): int =
+  if s.len < 4:
+    return 0
+  var i = 0
+  var sign = 1
+  if s[0] == '+': i += 1
+  elif s[0] == '-': i += 1; sign = -1
+  if s.len - i < 4:
+    return 0
+  let hours = parseInt(s[i..i+1])
+  let minutes = parseInt(s[i+2..i+3])
+  return sign * (hours * 60 + minutes)
+
+proc getReportTimestamp(zone: string): string =
+  let t = getTime()
+  case zone.toLowerAscii
+  of "utc":
+    return t.utc.format("yyyyMMdd'_'HHmmss")
+  of "local":
+    return t.local.format("yyyyMMdd'_'HHmmss")
+  else:
+    let offsetMinutes = parseOffsetMinutes(zone)
+    if offsetMinutes == 0 and zone.toLowerAscii notin ["+0000", "-0000", "0000"]:
+      gLogger.warn("无法解析时区配置，使用默认值 local", {"report_timezone": zone}.toTable)
+      return t.local.format("yyyyMMdd'_'HHmmss")
+    return (t.utc + initDuration(minutes = offsetMinutes)).format("yyyyMMdd'_'HHmmss")
+
 proc main() =
   var configFile = ""
   var dataFileArgs: seq[string] = @[]
@@ -263,7 +290,7 @@ proc main() =
   echo "║  通过: " & align($passed, 3) & "  失败: " & align($failed, 3) & "  跳过: " & align($skipped, 3) & "              ║"
   echo "╚══════════════════════════════════════════════════════╝"
 
-  let timestamp = now().format("yyyyMMdd'_'HHmmss")
+  let timestamp = getReportTimestamp(vars.getOrDefault("report_timezone", "local"))
   let reportsDir = "reports"
   createDir(reportsDir)
   let reportPrefix = reportsDir / "report_" & timestamp
@@ -274,7 +301,7 @@ proc main() =
   printFailDetails(results)
 
   if failed > 0:
-    gLogger.info("存在失败用例，退出码 1", {"failed": $failed}.toTable)
+    gLogger.info("所有用例已执行完成，存在失败用例，以退出码 1 结束", {"failed": $failed, "total": $results.len}.toTable)
     quit(1)
   gLogger.info("所有用例执行完成")
 
