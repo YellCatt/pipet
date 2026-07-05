@@ -280,16 +280,6 @@ proc main() =
     echo "\n没有加载到测试用例"
     return
 
-  let passed = results.countIt(it.status == "PASS")
-  let failed = results.countIt(it.status == "FAIL")
-  let skipped = results.countIt(it.status == "SKIP")
-
-  gLogger.info("测试执行统计", {"pass": $passed, "fail": $failed, "skip": $skipped}.toTable)
-
-  echo "\n╔══════════════════════════════════════════════════════╗"
-  echo "║  通过: " & align($passed, 3) & "  失败: " & align($failed, 3) & "  跳过: " & align($skipped, 3) & "              ║"
-  echo "╚══════════════════════════════════════════════════════╝"
-
   let timestamp = getReportTimestamp(vars.getOrDefault("report_timezone", "local"))
   let reportsDir = "reports"
   createDir(reportsDir)
@@ -299,11 +289,10 @@ proc main() =
   writePsvReport(results, reportPrefix & ".psv")
   writeErrorPsvReport(results, reportPrefix & "_error.psv")
   printFailDetails(results)
+  logSummary(results)
 
-  if failed > 0:
-    gLogger.info("所有用例已执行完成，存在失败用例，以退出码 1 结束", {"failed": $failed, "total": $results.len}.toTable)
+  if results.countIt(it.status == "FAIL") > 0:
     quit(1)
-  gLogger.info("所有用例执行完成")
 
 when isMainModule:
   main()

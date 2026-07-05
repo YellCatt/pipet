@@ -1,4 +1,4 @@
-import std/[strutils, sequtils, json, tables]
+import std/[strutils, sequtils, json, tables, math]
 import core, logger
 
 proc normalizeBody(s: string): string =
@@ -60,15 +60,71 @@ proc writeErrorPsvReport*(results: seq[TestResult], filename: string) =
   gLogger.info("异常报告已生成", {"file": filename, "rows": $fails.len}.toTable)
   echo "异常用例 PSV 报告已保存: " & filename
 
+proc summarizeFail(fails: seq[TestResult]): seq[tuple[key: string, reasons: seq[string]]] =
+  ## 按 URL 汇总失败原因，相同 URL 的多条差异合并成一条记录。
+  result = @[]
+  var order = newSeq[string]()
+  var grouped = initTable[string, seq[string]]()
+  for r in fails:
+    let key = r.url
+    if key notin grouped:
+      grouped[key] = @[]
+      order.add(key)
+    let reason = if r.diff.len > 0: r.diff else: "未记录具体差异"
+    grouped[key].add(reason)
+  for key in order:
+    result.add((key: key, reasons: grouped[key]))
+
 proc printFailDetails*(results: seq[TestResult]) =
+  let failed = results.countIt(it.status == "FAIL")
+  let passed = results.countIt(it.status == "PASS")
+  let executed = passed + failed
+
+  echo ""
+  echo "通过 " & $passed & " 个 / ❌ 失败 " & $failed & " 个"
+  if executed > 0:
+    let rate = (float(passed) * 100.0) / float(executed)
+    echo "通过率：" & formatFloat(rate, ffDecimal, 0) & "%"
+  else:
+    echo "通过率：0%"
+
   let fails = results.filterIt(it.status == "FAIL")
   if fails.len == 0: return
 
-  echo "\n" & repeat("=", 60)
-  echo "失败用例详情（实际响应体）"
-  echo repeat("=", 60)
+  echo "\n问题："
+  let summary = summarizeFail(fails)
+  for item in summary:
+    echo "- " & item.key & "：" & item.reasons.join("；")
 
-  for r in fails:
-    echo "\n[" & r.id & "] " & r.desc
-    echo "  差异: " & r.diff
-    echo "  实际响应体: " & r.actualBody
+proc logSummary*(results: seq[TestResult]) =
+  ## 将统计信息汇总成一条日志输出。
+  let failed = results.countIt(it.status == "FAIL")
+  let passed = results.countIt(it.status == "PASS")
+  let executed = passed + failed
+
+  var summaryTable = initTable[string, string]()
+  summaryTable["total"] = $results.len
+  summaryTable["passed"] = $passed
+  summaryTable["failed"] = $failed
+  summaryTable["skipped"] = $(results.countIt(it.status == "SKIP"))
+
+  if executed > 0:
+    let rate = (float(passed) * 100.0) / float(executed)
+    summaryTable["pass_rate"] = formatFloat(rate, ffDecimal, 0) & "%"
+  else:
+    summaryTable["pass_rate"] = "0%"
+
+  let fails = results.filterIt(it.status == "FAIL")
+  if fails.len > 0:
+    let summary = summarizeFail(fails)
+    var items = newSeq[string]()
+    for item in summary:
+      items.add(item.key & "：" & item.reasons.join("；"))
+    summaryTable["problems"] = items.join(" | ")
+
+  let msg = if failed > 0:
+    "通过 " & $passed & " 个 / ❌ 失败 " & $failed & " 个，通过率 " & summaryTable["pass_rate"] & "，存在失败用例"
+  else:
+    "通过 " & $passed & " 个 / ❌ 失败 " & $failed & " 个，通过率 " & summaryTable["pass_rate"] & "，全部通过"
+
+  gLogger.info(msg, summaryTable)
