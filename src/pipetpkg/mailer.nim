@@ -1,4 +1,4 @@
-import std/[smtp, strutils, sequtils, times, tables]
+import smtp, strutils, sequtils, times, tables
 import types, logger
 
 type
