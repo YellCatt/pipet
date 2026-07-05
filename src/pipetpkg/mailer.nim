@@ -70,7 +70,15 @@ proc sendTestReport*(mailer: Mailer;
   let msg = createMessage(subject, body, mailer.config.fromAddr, mailer.config.toAddrs)
 
   gLogger.info("正在发送测试结果邮件",
-    {"to": mailer.config.toAddrs.join(", "), "subject": subject}.toTable)
+    {"to": mailer.config.toAddrs.join(", "),
+     "subject": subject,
+     "smtp": mailer.config.smtpHost & ":" & $mailer.config.smtpPort,
+     "ssl": if mailer.config.useSsl: "true" else: "false"}.toTable)
+
+  when not defined(ssl):
+    if mailer.config.useSsl:
+      gLogger.warn("当前二进制未以 -d:ssl 编译，无法建立 SSL 连接，跳过发送邮件")
+      return
 
   var client = newSmtp(useSsl = mailer.config.useSsl)
   client.connect(mailer.config.smtpHost, Port(mailer.config.smtpPort))
