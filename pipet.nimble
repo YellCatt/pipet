@@ -12,11 +12,11 @@ requires "unicodedb >= 0.13.2"
 bin = @["pipet"]
 binDir = "dist/pipet"
 
-task release, "Build release binary (fully static, no external .so/.dll)":
+task release, "Build release binary":
   when defined(windows):
-    exec "nimble build -d:release --opt:size --dynlibOverride:ssl --dynlibOverride:crypto"
+    exec "nimble build -d:release --opt:size"
   else:
-    exec "nimble build -d:release --opt:size --passC:-static --passL:-static --dynlibOverride:ssl --dynlibOverride:crypto"
+    exec "nimble build -d:release --opt:size --passC:-static --passL:-static"
 
 task package, "Package exe and resources into dist/pipet":
   rmDir "dist"

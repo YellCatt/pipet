@@ -1,5 +1,5 @@
 import std/[json, os, parseopt, sequtils, strutils, sugar, tables, terminal, times]
-import pipetpkg/[core, report, logger, executor]
+import pipetpkg/[core, report, logger, executor, mailer]
 
 proc resolveConfigFile(userPath: string): string =
   if userPath.len > 0:
@@ -145,6 +145,7 @@ proc main() =
   gLogger.info("配置加载完成", {"config": configFile, "log_level": $gLogger.level, "vars_count": $vars.len}.toTable)
 
   let selectedTags = tagsFilter.split(',').mapIt(it.strip()).filterIt(it.len > 0)
+  let startTime = epochTime()
   var allResults: seq[TestResult]
 
   echo "╔══════════════════════════════════════════════════════╗"
@@ -285,6 +286,14 @@ proc main() =
   let skipped = results.countIt(it.status == "SKIP")
 
   gLogger.info("测试执行统计", {"pass": $passed, "fail": $failed, "skip": $skipped}.toTable)
+
+  let durationSec = epochTime() - startTime
+  let mailerConfig = initMailerConfig(vars)
+  let mailer = newMailer(mailerConfig)
+  mailer.sendTestReport(passed, failed, skipped, durationSec, results)
+
+  echo "\n═══════════════════════════════════════════════════════"
+
 
   echo "\n╔══════════════════════════════════════════════════════╗"
   echo "║  通过: " & align($passed, 3) & "  失败: " & align($failed, 3) & "  跳过: " & align($skipped, 3) & "              ║"
