@@ -253,11 +253,11 @@ proc runTest*(tc: TestCase; config: HttpConfig): TestResult =
 
   if tc.bodyRegex.len > 0:
     let pattern = tc.bodyRegex
-    let isNot = pattern.startsWith("!")
-    let regexPattern = if isNot: pattern[1..^1] else: pattern
+    let isNegated = pattern.startsWith("!")
+    let regexPattern = if isNegated: pattern[1..^1] else: pattern
     try:
       let regex = re2(regexPattern)
-      if isNot:
+      if isNegated:
         if actualBody.contains(regex):
           diffs.add("响应体不应匹配正则模式: " & pattern)
           gLogger.info("响应体非正则匹配失败", {"id": tc.id, "pattern": pattern}.toTable)
