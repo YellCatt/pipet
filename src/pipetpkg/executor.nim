@@ -51,34 +51,35 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
     attempt += 1
     try:
       var resp: Response
+      let timeoutSec = float32(pool.timeoutMs) / 1000.0
       case tc.httpMethod.toUpperAscii
       of "GET":
-        resp = get(url, headers = headers)
+        resp = get(url, headers = headers, timeout = timeoutSec)
       of "POST":
         if multipartFields.text.len > 0 or multipartFields.files.len > 0:
           let (multipartContentType, multipartBody) = buildMultipartBody(multipartFields.text, multipartFields.files)
           var multipartHeaders = headers
           multipartHeaders["Content-Type"] = multipartContentType
-          resp = post(url, body = multipartBody, headers = multipartHeaders)
+          resp = post(url, body = multipartBody, headers = multipartHeaders, timeout = timeoutSec)
         elif reqBody.len > 0:
           var contentHeaders = headers
           if contentType.len > 0:
             contentHeaders["Content-Type"] = contentType
-          resp = post(url, body = reqBody, headers = contentHeaders)
+          resp = post(url, body = reqBody, headers = contentHeaders, timeout = timeoutSec)
         else:
-          resp = post(url, headers = headers)
+          resp = post(url, headers = headers, timeout = timeoutSec)
       of "PUT":
         var putHeaders = headers
         if contentType.len > 0:
           putHeaders["Content-Type"] = contentType
-        resp = put(url, body = reqBody, headers = putHeaders)
+        resp = put(url, body = reqBody, headers = putHeaders, timeout = timeoutSec)
       of "PATCH":
         var patchHeaders = headers
         if contentType.len > 0:
           patchHeaders["Content-Type"] = contentType
-        resp = patch(url, body = reqBody, headers = patchHeaders)
+        resp = patch(url, body = reqBody, headers = patchHeaders, timeout = timeoutSec)
       of "DELETE":
-        resp = delete(url, headers = headers)
+        resp = delete(url, headers = headers, timeout = timeoutSec)
       else:
         gLogger.error("未知 HTTP 方法", {"method": tc.httpMethod}.toTable)
         return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & tc.httpMethod)
