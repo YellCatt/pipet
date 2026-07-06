@@ -1,0 +1,160 @@
+name: Build and Release Windows amd64
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 'Debug: 列出仓库目录结构'
+        shell: pwsh
+        run: |
+          Write-Host "=== 当前工作目录 ==="
+          Get-Location
+          Write-Host ""
+          Write-Host "=== 项目根目录文件列表 ==="
+          Get-ChildItem
+          Write-Host ""
+          Write-Host "=== src 目录 ==="
+          if (Test-Path src) { Get-ChildItem src -Recurse } else { Write-Host "src 目录不存在" }
+          Write-Host ""
+          Write-Host "=== .nimble 文件内容 ==="
+          Get-Content pipet.nimble
+          Write-Host ""
+
+      - name: Setup Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: '2.0.0'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 'Debug: 检查 Nim 和 Nimble 版本'
+        shell: pwsh
+        run: |
+          Write-Host "=== Nim 版本 ==="
+          nim --version
+          Write-Host ""
+          Write-Host "=== Nimble 版本 ==="
+          nimble --version
+          Write-Host ""
+          Write-Host "=== PATH 环境变量 ==="
+          $env:PATH -split ';'
+          Write-Host ""
+
+      - name: Cache Nimble packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.nimble
+          key: windows-amd64-nimble-v2-${{ hashFiles('**/*.nimble', '**/*.nim') }}
+          restore-keys: |
+            windows-amd64-nimble-v2-
+
+      - name: Nimble install dependencies
+        shell: pwsh
+        run: |
+          Write-Host "=== 执行 nimble install -y ==="
+          nimble install -y
+          Write-Host ""
+          Write-Host "=== 安装后目录 ==="
+          Get-ChildItem
+
+      - name: Build (Windows amd64)
+        shell: pwsh
+        run: |
+          Write-Host "=== 执行 nimble build -d:release (Windows amd64) ==="
+          nimble build -d:release --dynlibOverride:ssl --dynlibOverride:crypto --verbose
+          Write-Host ""
+          Write-Host "=== 构建退出码: $LASTEXITCODE ==="
+          Write-Host ""
+          Write-Host "=== 构建后根目录 ==="
+          Get-ChildItem
+          Write-Host ""
+          Write-Host "=== dist 目录 ==="
+          if (Test-Path dist) { Get-ChildItem dist -Recurse } else { Write-Host "dist 目录不存在" }
+          Write-Host ""
+          Write-Host "=== bin 目录 ==="
+          if (Test-Path bin) { Get-ChildItem bin -Recurse } else { Write-Host "bin 目录不存在" }
+
+      - name: Package artifact (Windows amd64)
+        shell: pwsh
+        run: |
+          Write-Host "=== 寻找 pipet.exe ==="
+          $srcPath = ".\dist\pipet\pipet.exe"
+          $altPath1 = ".\pipet.exe"
+          $altPath2 = ".\bin\pipet.exe"
+
+          $foundPath = $null
+          if (Test-Path $srcPath) { $foundPath = $srcPath }
+          elseif (Test-Path $altPath1) { $foundPath = $altPath1 }
+          elseif (Test-Path $altPath2) { $foundPath = $altPath2 }
+
+          $outExe = "pipet-windows-amd64.exe"
+          $outZip = "pipet-windows-amd64.zip"
+          if ($foundPath) {
+            Write-Host "找到: $foundPath"
+            Copy-Item -Path $foundPath -Destination ".\$outExe"
+            Write-Host ""
+            Write-Host "=== 文件信息 ==="
+            Get-Item $outExe | Format-List
+            Write-Host ""
+            Write-Host "=== 创建压缩包 ==="
+            Compress-Archive -Path ".\$outExe" -DestinationPath $outZip -Force
+            Write-Host "=== 压缩包信息 ==="
+            Get-Item $outZip | Format-List
+          } else {
+            Write-Host "ERROR: 没有找到 pipet.exe"
+            Write-Host "尝试路径:"
+            Write-Host "  - $srcPath"
+            Write-Host "  - $altPath1"
+            Write-Host "  - $altPath2"
+            Write-Host ""
+            Write-Host "=== 搜索所有 exe ==="
+            Get-ChildItem -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipet-windows-amd64
+          path: |
+            pipet-windows-amd64.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: ls -la artifacts/
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v$(date +%Y%m%d-%H%M%S)-windows-amd64"
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --notes "Windows amd64 automatic build" \
+            artifacts/*

@@ -1,0 +1,290 @@
+name: Build and Release Linux i386
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SUFFIX: linux-i386
+      ARCH: i386
+      CROSS_PREFIX: i686-linux-gnu
+      TOOLCHAIN_PKG: gcc-i686-linux-gnu
+      OPENSSL_TARGET: linux-x86
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 'Debug: 列出仓库目录结构'
+        shell: bash
+        run: |
+          echo "=== 当前工作目录 ==="
+          pwd
+          echo ""
+          echo "=== 项目根目录文件列表 ==="
+          ls -la
+          echo ""
+          echo "=== src 目录 ==="
+          if [ -d src ]; then find src -type f; else echo "src 目录不存在"; fi
+          echo ""
+          echo "=== .nimble 文件内容 ==="
+          cat pipet.nimble
+          echo ""
+
+      - name: Setup Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: '2.0.0'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 'Debug: 检查 Nim 和 Nimble 版本'
+        shell: bash
+        run: |
+          echo "=== Nim 版本 ==="
+          nim --version
+          echo ""
+          echo "=== Nimble 版本 ==="
+          nimble --version
+          echo ""
+          echo "=== PATH 环境变量 ==="
+          echo $PATH | tr ':' '\n'
+          echo ""
+
+      - name: Cache Nimble packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.nimble
+          key: ${{ env.SUFFIX }}-nimble-v2-${{ hashFiles('**/*.nimble', '**/*.nim') }}
+          restore-keys: |
+            ${{ env.SUFFIX }}-nimble-v2-
+
+      - name: Install cross compiler (Linux i386)
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.TOOLCHAIN_PKG }}
+          sudo apt-get install -y g++-i686-linux-gnu libc6-dev-i386-cross
+
+      - name: Cache static dependencies (curl/OpenSSL/zlib)
+        uses: actions/cache@v4
+        with:
+          path: .static-deps
+          key: static-deps-${{ env.SUFFIX }}-curl8.5.0-openssl3.2.1-zlib1.3.1-${{ hashFiles('.github/workflows/build-release-linux-i386.yml') }}
+
+      - name: Build static curl and OpenSSL (Linux i386)
+        shell: bash
+        run: |
+          set -e
+          WORK_DIR=$PWD
+          INSTALL_PREFIX=$WORK_DIR/.static-deps/${{ env.SUFFIX }}
+          mkdir -p $INSTALL_PREFIX
+
+          if [ -f "$INSTALL_PREFIX/lib/libcurl.a" ] && [ -f "$INSTALL_PREFIX/lib/libssl.a" ] && [ -f "$INSTALL_PREFIX/lib/libz.a" ]; then
+            echo "静态依赖已存在，跳过编译"
+            echo "STATIC_DEPS_PREFIX=$INSTALL_PREFIX" >> $GITHUB_ENV
+            ls -la $INSTALL_PREFIX/lib
+            exit 0
+          fi
+
+          ZLIB_VERSION=1.3.1
+          wget -q https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz || \
+            wget -q https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz || \
+            wget -q https://zlib.net/fossils/zlib-${ZLIB_VERSION}.tar.gz
+          tar xzf zlib-${ZLIB_VERSION}.tar.gz
+          cd zlib-${ZLIB_VERSION}
+          CC=${{ env.CROSS_PREFIX }}-gcc \
+            AR=${{ env.CROSS_PREFIX }}-ar \
+            RANLIB=${{ env.CROSS_PREFIX }}-ranlib \
+            ./configure --prefix=$INSTALL_PREFIX --static
+          make -j$(nproc)
+          make install
+          cd $WORK_DIR
+
+          OPENSSL_VERSION=3.2.1
+          wget -q https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz || \
+            wget -q https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz
+          tar xzf openssl-${OPENSSL_VERSION}.tar.gz
+          cd openssl-${OPENSSL_VERSION}
+          ./Configure \
+            ${{ env.OPENSSL_TARGET }} \
+            --cross-compile-prefix=${{ env.CROSS_PREFIX }}- \
+            --prefix=$INSTALL_PREFIX \
+            no-zlib \
+            no-shared \
+            no-tests
+          make -j$(nproc)
+          make install_sw
+          cd $WORK_DIR
+
+          curl -LO https://github.com/curl/curl/releases/download/curl-8_5_0/curl-8.5.0.tar.gz || \
+            curl -LO https://curl.se/download/curl-8.5.0.tar.gz
+          tar xzf curl-8.5.0.tar.gz
+          cd curl-8.5.0
+          CC=${{ env.CROSS_PREFIX }}-gcc \
+            CXX=${{ env.CROSS_PREFIX }}-g++ \
+            AR=${{ env.CROSS_PREFIX }}-ar \
+            RANLIB=${{ env.CROSS_PREFIX }}-ranlib \
+            PKG_CONFIG_LIBDIR=$INSTALL_PREFIX/lib/pkgconfig \
+            ac_cv_lib_crypto_RSA_free=yes \
+            ac_cv_lib_crypto_CRYPTO_free=yes \
+            ac_cv_lib_crypto_OPENSSL_init_crypto=yes \
+            ac_cv_lib_crypto_EVP_MD_CTX_free=yes \
+            ac_cv_lib_ssl_OPENSSL_init_ssl=yes \
+            ac_cv_lib_ssl_SSL_CTX_new=yes \
+            ac_cv_lib_ssl_SSL_connect=yes \
+            ac_cv_lib_ssl_SSL_get_certificate=yes \
+            ac_cv_func_OPENSSL_init_ssl=yes \
+            LIBS="-lcrypto -lssl -lz -lpthread" \
+            ./configure \
+            --host=${{ env.CROSS_PREFIX }} \
+            --prefix=$INSTALL_PREFIX \
+            --disable-shared \
+            --enable-static \
+            --with-openssl=$INSTALL_PREFIX \
+            --with-zlib=$INSTALL_PREFIX \
+            --without-libpsl \
+            --without-brotli \
+            --without-zstd \
+            --without-nghttp2 \
+            --disable-ldap \
+            --disable-ldaps \
+            --without-libssh2 \
+            --disable-rtsp \
+            --disable-dict \
+            --disable-telnet \
+            --disable-tftp \
+            --disable-pop3 \
+            --disable-imap \
+            --disable-smtp \
+            --disable-gopher \
+            --disable-mqtt \
+            --disable-manual
+          make -j$(nproc)
+          make install
+          cd $WORK_DIR
+
+          echo "STATIC_DEPS_PREFIX=$INSTALL_PREFIX" >> $GITHUB_ENV
+          echo "Built static deps: $INSTALL_PREFIX"
+          ls -la $INSTALL_PREFIX/lib
+
+      - name: Nimble install dependencies
+        shell: bash
+        run: |
+          echo "=== 执行 nimble install -y ==="
+          nimble install -y
+          echo ""
+          echo "=== 安装后目录 ==="
+          ls -la
+
+      - name: Build (Linux i386)
+        shell: bash
+        run: |
+          set -e
+          export CC=${{ env.CROSS_PREFIX }}-gcc
+          CROSS_FLAGS="--cpu:${{ env.ARCH }} --os:linux --cc:gcc --gcc.exe:${{ env.CROSS_PREFIX }}-gcc --gcc.linkerexe:${{ env.CROSS_PREFIX }}-gcc"
+          echo "=== 执行 nimble build -d:release --verbose (Linux ${{ env.ARCH }}) ==="
+          nimble build \
+            -d:release \
+            $CROSS_FLAGS \
+            --passC:-static \
+            --passL:-static \
+            --passC:-I$STATIC_DEPS_PREFIX/include \
+            --passL:-L$STATIC_DEPS_PREFIX/lib \
+            --passL:-lcurl \
+            --passL:-lssl \
+            --passL:-lcrypto \
+            --passL:-lz \
+            --passL:-lpthread \
+            --passL:-ldl \
+            --dynlibOverride:curl \
+            --dynlibOverride:ssl \
+            --dynlibOverride:crypto \
+            --verbose
+          echo ""
+          echo "=== 构建后根目录 ==="
+          ls -la
+          echo ""
+          echo "=== dist 目录 ==="
+          if [ -d dist ]; then find dist -type f; else echo "dist 目录不存在"; fi
+          echo ""
+          echo "=== bin 目录 ==="
+          if [ -d bin ]; then find bin -type f; else echo "bin 目录不存在"; fi
+          echo ""
+
+      - name: Package artifact (Linux i386)
+        shell: bash
+        run: |
+          set -e
+          echo "=== 寻找 pipet 二进制 ==="
+          if [ -f dist/pipet/pipet ]; then
+            echo "找到: dist/pipet/pipet"
+            cp dist/pipet/pipet ./pipet-${{ env.SUFFIX }}
+          elif [ -f bin/pipet ]; then
+            echo "找到: bin/pipet"
+            cp bin/pipet ./pipet-${{ env.SUFFIX }}
+          elif [ -f pipet ]; then
+            echo "找到: ./pipet"
+            cp pipet ./pipet-${{ env.SUFFIX }}
+          else
+            echo "ERROR: 没有找到 pipet 二进制"
+            echo "尝试路径:"
+            echo "  - dist/pipet/pipet"
+            echo "  - bin/pipet"
+            echo "  - ./pipet"
+            echo ""
+            echo "=== 搜索所有可执行文件 ==="
+            find . -type f -executable -name "pipet*" 2>/dev/null
+            exit 1
+          fi
+          echo ""
+          echo "=== 文件信息 ==="
+          file pipet-${{ env.SUFFIX }}
+          ls -lh pipet-${{ env.SUFFIX }}
+          echo ""
+          echo "=== 创建压缩包 ==="
+          tar czvf pipet-${{ env.SUFFIX }}.tar.gz pipet-${{ env.SUFFIX }}
+          ls -lh pipet-${{ env.SUFFIX }}.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipet-${{ env.SUFFIX }}
+          path: |
+            pipet-${{ env.SUFFIX }}.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: ls -la artifacts/
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v$(date +%Y%m%d-%H%M%S)-linux-i386"
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --notes "Linux i386 automatic build" \
+            artifacts/*
