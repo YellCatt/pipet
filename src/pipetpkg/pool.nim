@@ -5,13 +5,13 @@ import types
 proc newHttpClientPool*(maxSize: int; timeoutMs: int): HttpClientPool =
   result = HttpClientPool(maxSize: maxSize, timeoutMs: timeoutMs, available: @[])
   for i in 0 ..< maxSize:
-    result.available.add(newClient(timeout = timeoutMs))
+    result.available.add(newHttpClient(timeout = timeoutMs))
 
 proc borrowClient*(pool: HttpClientPool): HttpClient =
   if pool.available.len > 0:
     result = pool.available.pop()
   else:
-    result = newClient(timeout = pool.timeoutMs)
+    result = newHttpClient(timeout = pool.timeoutMs)
 
 proc returnClient*(pool: HttpClientPool; client: HttpClient; discardClient: bool = false) =
   if discardClient:
