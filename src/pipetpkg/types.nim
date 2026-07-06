@@ -1,6 +1,7 @@
-import std/[httpclient, json, tables]
+import std/[json, tables]
 
 type
+  HttpClient* = object
   StreamAssert* = object
     kind*: string
     pattern*: string
