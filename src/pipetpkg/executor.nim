@@ -36,7 +36,7 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
       of "GET":
         resp = get(url, headers = tc.headers)
       of "POST":
-        if multipart != nil:
+        if multipart.len > 0:
           resp = post(url, multipart = multipart, headers = tc.headers)
         elif reqBody.len > 0:
           resp = post(url, body = reqBody, headers = tc.headers, contentType = contentType)
@@ -79,7 +79,7 @@ proc formatConditionInfo*(c: Condition): tuple[url: string, headers: string, bod
   let hJson = newJObject()
   for k, v in allHeaders:
     hJson[k] = %v
-  let bodyStr = if multipart != nil: "(multipart)" else: reqBody
+  let bodyStr = if multipart.len > 0: "(multipart)" else: reqBody
   result = (url: finalUrl, headers: $hJson, body: bodyStr)
 
 proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status: int, body: string, durationSec: float, error: string] =
@@ -104,7 +104,7 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
     of "GET":
       resp = get(url, headers = c.headers)
     of "POST":
-      if multipart != nil:
+      if multipart.len > 0:
         resp = post(url, multipart = multipart, headers = c.headers)
       elif reqBody.len > 0:
         resp = post(url, body = reqBody, headers = c.headers, contentType = contentType)
@@ -158,7 +158,7 @@ proc formatRequestInfo*(tc: TestCase): tuple[url: string, headers: string, body:
   let hJson = newJObject()
   for k, v in allHeaders:
     hJson[k] = %v
-  let bodyStr = if multipart != nil: "(multipart)" else: reqBody
+  let bodyStr = if multipart.len > 0: "(multipart)" else: reqBody
   result = (url: finalUrl, headers: $hJson, body: bodyStr)
 
 proc runTest*(tc: TestCase; pool: HttpClientPool; retryCount: int = 0; retryDelayMs: int = 0): TestResult =

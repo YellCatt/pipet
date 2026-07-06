@@ -29,52 +29,52 @@ proc splitFormFields*(form: string): tuple[textFields: Table[string, string], fi
     else:
       result.textFields[key] = val
 
-proc buildMultipartData*(textFields: Table[string, string]; fileFields: Table[string, string]): MultipartData =
-  result = newMultipartData()
+proc buildMultipartEntries*(textFields: Table[string, string]; fileFields: Table[string, string]): seq[MultipartEntry] =
+  result = @[]
   for fieldName, filePath in fileFields:
     if not fileExists(filePath):
       gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
       continue
-    result.addFiles([(fieldName, filePath)])
+    result.add(MultipartEntry(name: fieldName, filename: filePath, fileContent: readFile(filePath)))
   for key, val in textFields:
-    result.add([(key, val)])
+    result.add(MultipartEntry(name: key, content: val))
 
-proc selectRequestBody*(tc: TestCase): tuple[body: string, contentType: string, multipart: MultipartData] =
+proc selectRequestBody*(tc: TestCase): tuple[body: string, contentType: string, multipart: seq[MultipartEntry]] =
   let (textFields, fileFields) = splitFormFields(tc.form)
   if fileFields.len > 0:
     gLogger.debug("选择 multipart 文件请求体", {"files_count": $fileFields.len, "text_fields_count": $textFields.len}.toTable)
-    return ("", "", buildMultipartData(textFields, fileFields))
+    return ("", "", buildMultipartEntries(textFields, fileFields))
   if tc.json.len > 0:
     gLogger.debug("选择 JSON 请求体", {"content_type": "application/json", "body_len": $tc.json.len}.toTable)
-    return (tc.json, "application/json", nil)
+    return (tc.json, "application/json", @[])
   if tc.form.len > 0:
     gLogger.debug("选择表单请求体", {"content_type": "application/x-www-form-urlencoded", "body_len": $tc.form.len}.toTable)
-    return (tc.form, "application/x-www-form-urlencoded", nil)
+    return (tc.form, "application/x-www-form-urlencoded", @[])
   if tc.body.len > 0:
     gLogger.debug("选择自定义请求体", {"body_len": $tc.body.len}.toTable)
-    return (tc.body, "", nil)
+    return (tc.body, "", @[])
   if tc.payload.len > 0:
     gLogger.debug("选择 payload 请求体", {"body_len": $tc.payload.len}.toTable)
-    return (tc.payload, "", nil)
+    return (tc.payload, "", @[])
   gLogger.debug("请求体为空")
-  return ("", "", nil)
+  return ("", "", @[])
 
-proc selectConditionBody*(c: Condition): tuple[body: string, contentType: string, multipart: MultipartData] =
+proc selectConditionBody*(c: Condition): tuple[body: string, contentType: string, multipart: seq[MultipartEntry]] =
   let (textFields, fileFields) = splitFormFields(c.form)
   if fileFields.len > 0:
     gLogger.debug("选择条件 multipart 文件请求体", {"files_count": $fileFields.len, "text_fields_count": $textFields.len}.toTable)
-    return ("", "", buildMultipartData(textFields, fileFields))
+    return ("", "", buildMultipartEntries(textFields, fileFields))
   if c.json.len > 0:
     gLogger.debug("选择条件 JSON 请求体", {"content_type": "application/json", "body_len": $c.json.len}.toTable)
-    return (c.json, "application/json", nil)
+    return (c.json, "application/json", @[])
   if c.form.len > 0:
     gLogger.debug("选择条件表单请求体", {"content_type": "application/x-www-form-urlencoded", "body_len": $c.form.len}.toTable)
-    return (c.form, "application/x-www-form-urlencoded", nil)
+    return (c.form, "application/x-www-form-urlencoded", @[])
   if c.body.len > 0:
     gLogger.debug("选择条件自定义请求体", {"body_len": $c.body.len}.toTable)
-    return (c.body, "", nil)
+    return (c.body, "", @[])
   if c.payload.len > 0:
     gLogger.debug("选择条件 payload 请求体", {"body_len": $c.payload.len}.toTable)
-    return (c.payload, "", nil)
+    return (c.payload, "", @[])
   gLogger.debug("条件请求体为空")
-  return ("", "", nil)
+  return ("", "", @[])
