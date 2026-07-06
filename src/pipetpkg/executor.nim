@@ -8,7 +8,7 @@ proc checkHttpsSupport*(url: string): string =
   return ""
 
 proc tableToHttpHeaders(headers: Table[string, string]): HttpHeaders =
-  result = newHttpHeaders()
+  result = initHttpHeaders()
   for k, v in headers:
     result[k] = v
 
