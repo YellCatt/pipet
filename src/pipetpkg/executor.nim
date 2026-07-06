@@ -44,21 +44,16 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
         resp = get(url, headers = headers)
       of "POST":
         if multipartFields.files.len > 0:
-          var multipart: seq[MultipartEntry] = @[]
-          for fieldName, filePath in multipartFields.files:
-            if not fileExists(filePath):
-              gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
-              continue
-            multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
-          resp = post(url, multipart = multipart, headers = headers)
+          gLogger.warn("Puppy 不支持 multipart 文件上传，请使用其他方式", {"id": tc.id}.toTable)
+          return (status: 0, body: "", durationSec: 0.0, error: "Puppy 不支持 multipart 文件上传")
         elif reqBody.len > 0:
-          resp = post(url, body = reqBody, headers = headers, contentType = contentType)
+          resp = post(url, body = reqBody, headers = headers)
         else:
           resp = post(url, headers = headers)
       of "PUT":
-        resp = put(url, body = reqBody, headers = headers, contentType = contentType)
+        resp = put(url, body = reqBody, headers = headers)
       of "PATCH":
-        resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
+        resp = patch(url, body = reqBody, headers = headers)
       of "DELETE":
         resp = delete(url, headers = headers)
       else:
@@ -119,21 +114,16 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
       resp = get(url, headers = headers)
     of "POST":
       if multipartFields.files.len > 0:
-        var multipart: seq[MultipartEntry] = @[]
-        for fieldName, filePath in multipartFields.files:
-          if not fileExists(filePath):
-            gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
-            continue
-          multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
-        resp = post(url, multipart = multipart, headers = headers)
+        gLogger.warn("Puppy 不支持 multipart 文件上传，请使用其他方式", {"id": c.id}.toTable)
+        return (status: 0, body: "", durationSec: 0.0, error: "Puppy 不支持 multipart 文件上传")
       elif reqBody.len > 0:
-        resp = post(url, body = reqBody, headers = headers, contentType = contentType)
+        resp = post(url, body = reqBody, headers = headers)
       else:
         resp = post(url, headers = headers)
     of "PUT":
-      resp = put(url, body = reqBody, headers = headers, contentType = contentType)
+      resp = put(url, body = reqBody, headers = headers)
     of "PATCH":
-      resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
+      resp = patch(url, body = reqBody, headers = headers)
     of "DELETE":
       resp = delete(url, headers = headers)
     else:
