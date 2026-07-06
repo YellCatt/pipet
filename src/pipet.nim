@@ -21,7 +21,7 @@ proc collectPsvFiles(dir: string): seq[string] =
   result = @[]
   if not dirExists(dir): return
   for f in walkDirRec(dir):
-    if f.endsWith(".psv") and fileExists(f):
+    if (f.endsWith(".psv") or f.endsWith(".csv")) and fileExists(f):
       result.add(f)
 
 proc resolveDataFiles(userPaths: seq[string]): seq[string] =
