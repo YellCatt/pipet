@@ -2,7 +2,7 @@
 # - nre 替代 std/re：零外部依赖（不需要 libpcre.so）
 # - BearSSL 纯 Nim TLS 实现，无需系统 OpenSSL
 # 启用 SSL 支持
-define("ssl")
+switch("define", "ssl")
 --path:"nim-regex/src"
 # begin Nimble config (version 2)
 when withDir(thisDir(), system.fileExists("nimble.paths")):
