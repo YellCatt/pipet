@@ -40,8 +40,15 @@ proc extractRegexMarker(s: string): string =
   ## 解析 {{regex:...}} 中的正则表达式模式
   result = s[8 ..< s.len - 2]
 
+proc extractNotRegexMarker(s: string): string =
+  ## 解析 {{not_regex:...}} 中的正则表达式模式
+  result = s[13 ..< s.len - 2]
+
 proc isRegexMarker(s: string): bool =
   s.startsWith("{{regex:") and s.endsWith("}}")
+
+proc isNotRegexMarker(s: string): bool =
+  s.startsWith("{{not_regex:") and s.endsWith("}}")
 
 proc isSkipMarker(s: string): bool = s == "{{skip}}"
 proc isNotExistsMarker(s: string): bool = s == "{{not_exists}}"
@@ -97,6 +104,15 @@ proc jsonDiff*(expect, actual: JsonNode, path: string = "", mode: string = "exac
         let regex = re2(pattern)
         if not actual.getStr().contains(regex):
           result.add(path & ": 正则匹配失败，模式 \"" & pattern & "\"，实际 \"" & actual.getStr() & "\"")
+      except CatchableError as e:
+        result.add(path & ": 正则表达式无效: " & pattern & "，错误: " & e.msg)
+    elif isNotRegexMarker(expectStr):
+      let pattern = extractNotRegexMarker(expectStr)
+      gLogger.debug("非正则断言", {"path": if path.len == 0: "(root)" else: path, "pattern": pattern}.toTable)
+      try:
+        let regex = re2(pattern)
+        if actual.getStr().contains(regex):
+          result.add(path & ": 不应匹配正则模式 \"" & pattern & "\"，但实际匹配到了: \"" & actual.getStr() & "\"")
       except CatchableError as e:
         result.add(path & ": 正则表达式无效: " & pattern & "，错误: " & e.msg)
     elif expectStr != actual.getStr():

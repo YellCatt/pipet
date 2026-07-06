@@ -8,6 +8,7 @@
 - 支持 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`
 - 支持 `{{var}}` 变量替换
 - 递归 JSON 全响应体断言
+- **支持正则断言**：字段级别 `{{regex:...}}`、`{{not_regex:...}}`；响应体级别 `body_regex`
 - 失败用例输出 PSV 格式报告
 - 使用 YAML 单一环境配置变量
 - 支持按 `tags` 列过滤执行用例
@@ -113,14 +114,12 @@ base_url: https://httpbin.org
 token: my-token
 log_level: info
 timeout: 30000
-pool_size: 1
 retry_count: 0
 retry_delay_ms: 0
 report_timezone: local
 ```
 
 - `timeout`：HTTP 请求超时时间（毫秒，默认 30000）
-- `pool_size`：HTTP 客户端连接池大小（默认 1）
 - `retry_count`：请求失败后的重试次数（默认 0）
 - `retry_delay_ms`：每次重试前的等待时间（毫秒，默认 0）
 - `report_timezone`：报告文件名时间戳时区，支持 `local`（本地时间，默认）、`utc` 或固定偏移（如 `+0800`、`-0500`）
@@ -140,7 +139,7 @@ report_timezone: local
 ## 测试用例格式
 
 ```psv
-id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract|stream_mode|stream_assert
+id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_body|tags|extract|stream_mode|stream_assert|match_mode|body_regex|pre|post
 ```
 
 - `stream_mode` 为 `1` 时启用 SSE 流式断言分支（默认不启用）
@@ -153,17 +152,74 @@ id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_b
 - `expected_body` 中字段值写成 `{{not_exists}}` 表示该字段必须不存在；写成 `{{skip}}` 表示跳过该字段对比
 - 流式用例的 `expected_body` 不再断言原始响应 JSON，而是断言最终聚合对象：`{"aggregated_content": "...", "chunk_count": N}`
 - `expected_body` 为期望的完整 JSON 响应体
-- 字段值写成 `{{regex:...}}` 表示用正则表达式断言该字段，例如 `{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}`
+- 字段值写成 `{{regex:...}}` 表示用正则表达式断言该字段**包含**指定模式，例如 `{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}`
+- 字段值写成 `{{not_regex:...}}` 表示用正则表达式断言该字段**不包含**指定模式，例如 `{"message":"{{not_regex:error}}"}`
+- `body_regex` 字段用于检查**整个响应体**的正则模式，前缀 `!` 表示不包含，例如 `!error`（不包含error）或 `success`（包含success）
+- `pre` 和 `post` 字段用于指定前置/后置条件 ID，多个用分号分隔，例如 `pre_01;pre_02`
 - 所有列支持 `{{var}}` 变量替换
 - `tags` 为标签列表，多个标签用逗号分隔，用于 `--tags` 过滤
 - 列按需加载：每个 PSV 文件可以只包含自己需要的列，不存在的列留空或省略表头即可；`json`、`form`、`body` 等空列表示不发送该类型请求体
-- 入参类型按优先级自动选择：
+- 入参类型按优先级自动选择（无需手动设置 `Content-Type`）：
   - `params`：URL 查询参数，如 `foo=bar&baz=1`，自动拼接到 URL
-  - `form`：自动以 `multipart/form-data` 发送；字段值以 `@` 或 `file://` 开头时作为文件字段上传，例如 `name=demo&upload=@data/sample.txt`
-  - `json`：自动以 `application/json` 发送
-  - `body`：原始请求体，配合 `headers` 中的 `Content-Type` 使用
+  - `form`：表单数据，自动设置 `Content-Type: multipart/form-data`；字段值以 `@` 或 `file://` 开头时作为文件字段上传，例如 `name=demo&upload=@data/sample.txt`
+  - `json`：JSON 数据，自动设置 `Content-Type: application/json`，支持复杂嵌套结构
+  - `body`：原始请求体，需在 `headers` 中手动指定 `Content-Type`，用于发送自定义格式数据（如 XML、二进制等）
   - `payload`：兼容旧列，作为无类型原始 body
   - 优先级：`form`（含文件字段）> `json` > `form`（纯文本）> `body` > `payload`
+
+### 入参字段区别
+
+| 字段 | Content-Type | 适用场景 | 示例 |
+|------|-------------|---------|------|
+| `form` | `multipart/form-data` | 表单提交、文件上传 | `name=demo&upload=@data/sample.txt` |
+| `json` | `application/json` | API 接口、复杂数据结构 | `{"user":"test","age":20}` |
+| `body` | 自定义 | 特殊格式、二进制数据 | 需配合 `headers` 设置 `Content-Type` |
+
+**为什么不通过 headers 判断？**
+
+pipet 采用"声明式"设计，通过独立字段明确指定入参类型，避免以下问题：
+- 无需手动编写复杂的 `Content-Type` 头
+- 自动处理编码（如 JSON 序列化、表单编码）
+- 文件上传场景需要特殊处理，仅通过 headers 无法表达
+- 可读性更好，一眼就能看出用例使用的入参类型
+
+## 正则断言
+
+pipet 支持多种正则断言方式，用于灵活校验响应内容：
+
+### 字段级别正则断言
+
+在 `expected_body` 中使用以下标记：
+
+| 标记 | 功能 | 示例 |
+|------|------|------|
+| `{{regex:...}}` | 检查字段值**包含**正则模式 | `{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}` |
+| `{{not_regex:...}}` | 检查字段值**不包含**正则模式 | `{"message":"{{not_regex:error}}"}` |
+| `{{skip}}` | 跳过此字段检查 | `{"data":"{{skip}}"}` |
+| `{{not_exists}}` | 断言字段必须不存在 | `{"password":"{{not_exists}}"}` |
+
+示例：
+```psv
+id|skip|desc|method|url|expected_status|expected_body|tags
+regex_01|0|检查IP格式|GET|{{base_url}}/ip|200|{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}|regex
+regex_02|0|检查消息无错误|GET|{{base_url}}/status/200|200|{"message":"{{not_regex:error}}"}|regex
+```
+
+### 响应体级别正则断言
+
+使用 `body_regex` 字段检查整个响应体，前缀 `!` 表示"不包含"：
+
+| 语法 | 功能 | 示例 |
+|------|------|------|
+| `pattern` | 检查整个响应体**包含**正则模式 | `success` |
+| `!pattern` | 检查整个响应体**不包含**正则模式 | `!error` |
+
+示例：
+```psv
+id|skip|desc|method|url|expected_status|body_regex|tags
+body_01|0|确保响应无错误|GET|{{base_url}}/health|200|!error|health
+body_02|0|确保响应包含成功信息|GET|{{base_url}}/success|200|success|health
+```
 
 ## 严格全量匹配
 

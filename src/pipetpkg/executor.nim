@@ -24,7 +24,7 @@ proc buildMultipartBody(textFields: Table[string, string], fileFields: Table[str
       gLogger.warn("上传文件不存在", {"field": key, "path": filePath}.toTable)
   result = encodeMultipart(entries)
 
-proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retryDelayMs: int): tuple[status: int, body: string, durationSec: float, error: string] =
+proc execHttpRequest*(tc: TestCase; config: HttpConfig): tuple[status: int, body: string, durationSec: float, error: string] =
   let start = epochTime()
   let url = buildUrl(tc.url, tc.params)
 
@@ -37,13 +37,13 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
     "headers_count": $tc.headers.len,
     "body_len": $reqBody.len,
     "expect_status": $tc.expectStatus,
-    "retry_count": $retryCount,
-    "retry_delay_ms": $retryDelayMs
+    "retry_count": $config.retryCount,
+    "retry_delay_ms": $config.retryDelayMs
   }.toTable)
 
   var lastError = ""
   var attempt = 0
-  let maxAttempts = retryCount + 1
+  let maxAttempts = config.retryCount + 1
 
   let headers = tableToHttpHeaders(tc.headers)
 
@@ -51,7 +51,7 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
     attempt += 1
     try:
       var resp: Response
-      let timeoutSec = float32(pool.timeoutMs) / 1000.0
+      let timeoutSec = float32(config.timeoutMs) / 1000.0
       case tc.httpMethod.toUpperAscii
       of "GET":
         resp = get(url, headers = headers, timeout = timeoutSec)
@@ -93,8 +93,8 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
       lastError = e.msg
       if attempt < maxAttempts:
         gLogger.warn("请求失败，准备重试", {"id": tc.id, "attempt": $attempt, "error": e.msg}.toTable)
-        if retryDelayMs > 0:
-          sleep(retryDelayMs)
+        if config.retryDelayMs > 0:
+          sleep(config.retryDelayMs)
       else:
         gLogger.error("请求异常", {"id": tc.id, "attempt": $attempt, "error": e.msg}.toTable)
 
@@ -114,7 +114,7 @@ proc formatConditionInfo*(c: Condition): tuple[url: string, headers: string, bod
   let bodyStr = if multipartFields.files.len > 0: "(multipart)" else: reqBody
   result = (url: finalUrl, headers: $hJson, body: bodyStr)
 
-proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status: int, body: string, durationSec: float, error: string] =
+proc execConditionHttpRequest*(c: Condition; config: HttpConfig): tuple[status: int, body: string, durationSec: float, error: string] =
   let start = epochTime()
   let url = buildUrl(c.url, c.params)
 
@@ -174,9 +174,9 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
 
   return (status: 0, body: "N/A", durationSec: 0.0, error: lastError)
 
-proc runCondition*(c: Condition; pool: HttpClientPool; vars: var Table[string, string]): tuple[ok: bool, diff: string, actualBody: string] =
+proc runCondition*(c: Condition; config: HttpConfig; vars: var Table[string, string]): tuple[ok: bool, diff: string, actualBody: string] =
   let (reqUrl, reqHeaders, reqBody) = formatConditionInfo(c)
-  let (actualStatus, actualBody, durationSec, error) = execConditionHttpRequest(c, pool)
+  let (actualStatus, actualBody, durationSec, error) = execConditionHttpRequest(c, config)
 
   if error.len > 0:
     return (false, "条件请求异常: " & error, actualBody)
@@ -206,11 +206,11 @@ proc formatRequestInfo*(tc: TestCase): tuple[url: string, headers: string, body:
   let bodyStr = if multipartFields.files.len > 0: "(multipart)" else: reqBody
   result = (url: finalUrl, headers: $hJson, body: bodyStr)
 
-proc runTest*(tc: TestCase; pool: HttpClientPool; retryCount: int = 0; retryDelayMs: int = 0): TestResult =
+proc runTest*(tc: TestCase; config: HttpConfig): TestResult =
   let expectBodyStr = $tc.expectBody
   let tags = tc.tags.join(",")
   let (reqUrl, reqHeaders, reqBody) = formatRequestInfo(tc)
-  let (actualStatus, actualBody, durationSec, error) = execHttpRequest(tc, pool, retryCount, retryDelayMs)
+  let (actualStatus, actualBody, durationSec, error) = execHttpRequest(tc, config)
 
   if error.len > 0:
     return TestResult(
@@ -250,6 +250,23 @@ proc runTest*(tc: TestCase; pool: HttpClientPool; retryCount: int = 0; retryDela
         )
       else:
         diffs.add("响应不是合法 JSON: " & preview)
+
+  if tc.bodyRegex.len > 0:
+    let pattern = tc.bodyRegex
+    let isNot = pattern.startsWith("!")
+    let regexPattern = if isNot: pattern[1..^1] else: pattern
+    try:
+      let regex = re2(regexPattern)
+      if isNot:
+        if actualBody.contains(regex):
+          diffs.add("响应体不应匹配正则模式: " & pattern)
+          gLogger.info("响应体非正则匹配失败", {"id": tc.id, "pattern": pattern}.toTable)
+      else:
+        if not actualBody.contains(regex):
+          diffs.add("响应体不匹配正则模式: " & pattern)
+          gLogger.info("响应体正则匹配失败", {"id": tc.id, "pattern": pattern}.toTable)
+    except CatchableError as e:
+      diffs.add("body_regex 正则表达式无效: " & pattern & "，错误: " & e.msg)
 
   if diffs.len > 0:
     return TestResult(
@@ -312,12 +329,12 @@ proc evalStreamAssert(sa: StreamAssert; aggregatedContent: string; node: JsonNod
   else:
     return false
 
-proc runStreamTest*(tc: TestCase; pool: HttpClientPool): TestResult =
+proc runStreamTest*(tc: TestCase; config: HttpConfig): TestResult =
   let start = epochTime()
   let expectBodyStr = $tc.expectBody
   let tags = tc.tags.join(",")
   let (reqUrl, reqHeaders, reqBody) = formatRequestInfo(tc)
-  let (actualStatus, actualBody, durationSec, error) = execHttpRequest(tc, pool, 0, 0)
+  let (actualStatus, actualBody, durationSec, error) = execHttpRequest(tc, config)
 
   if error.len > 0:
     return TestResult(

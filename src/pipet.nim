@@ -133,11 +133,10 @@ proc main() =
     gLogger.warn("未配置 base_url，使用默认值 http://localhost:8080", initTable[string, string]())
 
   let timeout = getIntConfig(vars, "timeout", 30000, 0)
-  let poolSize = getIntConfig(vars, "pool_size", 1, 1)
   let retryCount = getIntConfig(vars, "retry_count", 0, 0)
   let retryDelayMs = getIntConfig(vars, "retry_delay_ms", 0, 0)
 
-  let pool = newHttpClientPool(poolSize, timeout)
+  let config = newHttpConfig(timeout, retryCount, retryDelayMs)
 
   gLogger.level = parseLogLevel(vars.getOrDefault("log_level", "INFO"))
   gLogger.openLogFile("logs")
@@ -202,7 +201,7 @@ proc main() =
         let resolvedCond = resolveCondition(conditions[cid], fileVars)
         gLogger.debug("执行前置条件", {"id": tc.id, "condition": cid}.toTable)
         stdout.write "    [" & tc.id & "] pre:" & cid & " ... "
-        let rc = runCondition(resolvedCond, pool, fileVars)
+        let rc = runCondition(resolvedCond, config, fileVars)
         if rc.ok:
           styledEcho fgGreen, "OK", resetStyle
         else:
@@ -222,7 +221,7 @@ proc main() =
       let resolvedTc = resolveTestCase(tc, fileVars)
       gLogger.debug("开始执行用例", {"id": tc.id, "method": resolvedTc.httpMethod, "url": resolvedTc.url, "stream_mode": $resolvedTc.streamMode}.toTable)
       stdout.write "    [" & tc.id & "] " & tc.desc & " ... "
-      let r = if resolvedTc.streamMode: runStreamTest(resolvedTc, pool) else: runTest(resolvedTc, pool, retryCount, retryDelayMs)
+      let r = if resolvedTc.streamMode: runStreamTest(resolvedTc, config) else: runTest(resolvedTc, config)
 
       var extractedVars: seq[string]
       if r.status == "PASS":
@@ -241,7 +240,7 @@ proc main() =
         let resolvedCond = resolveCondition(conditions[cid], fileVars)
         gLogger.debug("执行后置条件", {"id": tc.id, "condition": cid}.toTable)
         stdout.write "    [" & tc.id & "] post:" & cid & " ... "
-        let rc = runCondition(resolvedCond, pool, fileVars)
+        let rc = runCondition(resolvedCond, config, fileVars)
         if rc.ok:
           styledEcho fgGreen, "OK", resetStyle
         else:

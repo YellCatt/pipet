@@ -263,7 +263,8 @@ proc loadCases*(filename: string, vars: Table[string, string]): seq[TestCase] =
       streamAsserts: streamAsserts,
       matchMode: effectiveMatchMode,
       pre: parsePrePostIds(rowEntryOr(parser, "pre", "")),
-      post: parsePrePostIds(rowEntryOr(parser, "post", ""))
+      post: parsePrePostIds(rowEntryOr(parser, "post", "")),
+      bodyRegex: replaceVars(rowEntryOr(parser, "body_regex"), vars)
     )
     gLogger.debug("解析用例行", {
       "row": $rowCount,

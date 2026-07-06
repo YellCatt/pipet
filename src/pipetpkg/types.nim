@@ -45,6 +45,7 @@ type
     matchMode*: string
     pre*: seq[string]
     post*: seq[string]
+    bodyRegex*: string
 
   TestResult* = object
     id*: string
@@ -65,7 +66,7 @@ type
     postConditions*: string
     extractedVars*: string
 
-  HttpClientPool* = ref object
-    maxSize*: int
+  HttpConfig* = object
     timeoutMs*: int
-    available*: seq[HttpClient]
+    retryCount*: int
+    retryDelayMs*: int
