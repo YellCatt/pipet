@@ -1,10 +1,11 @@
-import std/[httpclient, httpcore, json, os, strutils, tables, times, uri]
+import std/[json, os, strutils, tables, times, uri]
 import regex
+import puppy
 
 import logger, types, pool, request, jsonutils
 
 proc checkHttpsSupport*(url: string): string =
-  ## BearSSL 已支持 HTTPS，无需限制
+  ## Puppy 已原生支持 HTTPS
   return ""
 
 proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retryDelayMs: int): tuple[status: int, body: string, durationSec: float, error: string] =
@@ -24,7 +25,6 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
     "retry_delay_ms": $retryDelayMs
   }.toTable)
 
-  var resp: Response
   var lastError = ""
   var attempt = 0
   let maxAttempts = retryCount + 1
@@ -33,32 +33,39 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
     attempt += 1
     var client = pool.borrowClient()
     try:
-      client.headers = newHttpHeaders()
       for k, v in tc.headers:
         client.headers[k] = v
       if contentType.len > 0 and not tc.headers.hasKey("Content-Type"):
         client.headers["Content-Type"] = contentType
 
-      let methodEnum = case tc.httpMethod
-        of "GET": HttpGet
-        of "POST": HttpPost
-        of "PUT": HttpPut
-        of "PATCH": HttpPatch
-        of "DELETE": HttpDelete
+      var resp: Response
+      case tc.httpMethod.toUpperAscii
+      of "GET":
+        resp = client.get(url)
+      of "POST":
+        if multipart != nil:
+          resp = client.post(url, multipart = multipart)
+        elif reqBody.len > 0:
+          resp = client.post(url, body = reqBody)
         else:
-          gLogger.error("未知 HTTP 方法", {"method": tc.httpMethod}.toTable)
-          pool.returnClient(client)
-          return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & tc.httpMethod)
+          resp = client.post(url)
+      of "PUT":
+        resp = client.put(url, body = reqBody)
+      of "PATCH":
+        resp = client.patch(url, body = reqBody)
+      of "DELETE":
+        resp = client.delete(url)
+      else:
+        gLogger.error("未知 HTTP 方法", {"method": tc.httpMethod}.toTable)
+        pool.returnClient(client)
+        return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & tc.httpMethod)
 
-      resp = if multipart != nil:
-               client.request(url, httpMethod = methodEnum, multipart = multipart)
-             elif methodEnum == HttpGet and reqBody.len == 0:
-               client.get(url)
-             else:
-               client.request(url, httpMethod = methodEnum, body = reqBody)
       lastError = ""
       pool.returnClient(client)
-      break
+
+      let durationSec = epochTime() - start
+      return (status: resp.code, body: resp.body, durationSec: durationSec, error: "")
+
     except CatchableError as e:
       lastError = e.msg
       pool.returnClient(client, discardClient = true)
@@ -69,21 +76,7 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
       else:
         gLogger.error("请求异常", {"id": tc.id, "attempt": $attempt, "error": e.msg}.toTable)
 
-  if lastError.len > 0:
-    return (status: 0, body: "N/A", durationSec: 0.0, error: lastError)
-
-  let durationSec = epochTime() - start
-  let actualStatus = resp.code.int
-  let actualBody = resp.body
-
-  gLogger.debug("收到 HTTP 响应", {
-    "id": tc.id,
-    "status": $actualStatus,
-    "body_len": $actualBody.len,
-    "duration_s": formatFloat(durationSec, ffDecimal, 3)
-  }.toTable)
-
-  return (status: actualStatus, body: actualBody, durationSec: durationSec, error: "")
+  return (status: 0, body: "N/A", durationSec: 0.0, error: lastError)
 
 proc formatConditionInfo*(c: Condition): tuple[url: string, headers: string, body: string] =
   let finalUrl = buildUrl(c.url, c.params)
@@ -114,54 +107,47 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
     "body_len": $reqBody.len
   }.toTable)
 
-  var resp: Response
   var lastError = ""
   var client = pool.borrowClient()
   try:
-    client.headers = newHttpHeaders()
     for k, v in c.headers:
       client.headers[k] = v
     if contentType.len > 0 and not c.headers.hasKey("Content-Type"):
       client.headers["Content-Type"] = contentType
 
-    let methodEnum = case c.httpMethod
-      of "GET": HttpGet
-      of "POST": HttpPost
-      of "PUT": HttpPut
-      of "PATCH": HttpPatch
-      of "DELETE": HttpDelete
+    var resp: Response
+    case c.httpMethod.toUpperAscii
+    of "GET":
+      resp = client.get(url)
+    of "POST":
+      if multipart != nil:
+        resp = client.post(url, multipart = multipart)
+      elif reqBody.len > 0:
+        resp = client.post(url, body = reqBody)
       else:
-        gLogger.error("未知 HTTP 方法", {"method": c.httpMethod}.toTable)
-        pool.returnClient(client)
-        return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & c.httpMethod)
+        resp = client.post(url)
+    of "PUT":
+      resp = client.put(url, body = reqBody)
+    of "PATCH":
+      resp = client.patch(url, body = reqBody)
+    of "DELETE":
+      resp = client.delete(url)
+    else:
+      gLogger.error("未知 HTTP 方法", {"method": c.httpMethod}.toTable)
+      pool.returnClient(client)
+      return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & c.httpMethod)
 
-    resp = if multipart != nil:
-             client.request(url, httpMethod = methodEnum, multipart = multipart)
-           elif methodEnum == HttpGet and reqBody.len == 0:
-             client.get(url)
-           else:
-             client.request(url, httpMethod = methodEnum, body = reqBody)
     pool.returnClient(client)
+
+    let durationSec = epochTime() - start
+    return (status: resp.code, body: resp.body, durationSec: durationSec, error: "")
+
   except CatchableError as e:
     lastError = e.msg
     pool.returnClient(client, discardClient = true)
     gLogger.error("条件请求异常", {"id": c.id, "error": e.msg}.toTable)
 
-  if lastError.len > 0:
-    return (status: 0, body: "N/A", durationSec: 0.0, error: lastError)
-
-  let durationSec = epochTime() - start
-  let actualStatus = resp.code.int
-  let actualBody = resp.body
-
-  gLogger.debug("收到条件 HTTP 响应", {
-    "id": c.id,
-    "status": $actualStatus,
-    "body_len": $actualBody.len,
-    "duration_s": formatFloat(durationSec, ffDecimal, 3)
-  }.toTable)
-
-  return (status: actualStatus, body: actualBody, durationSec: durationSec, error: "")
+  return (status: 0, body: "N/A", durationSec: 0.0, error: lastError)
 
 proc runCondition*(c: Condition; pool: HttpClientPool; vars: var Table[string, string]): tuple[ok: bool, diff: string, actualBody: string] =
   let (reqUrl, reqHeaders, reqBody) = formatConditionInfo(c)
@@ -269,7 +255,6 @@ proc runTest*(tc: TestCase; pool: HttpClientPool; retryCount: int = 0; retryDela
   )
 
 proc parseSseLine(line: string): JsonNode =
-  ## 解析 SSE 的 data: {...} 行
   let trimmed = line.strip()
   if not trimmed.startsWith("data:"):
     return nil
@@ -282,7 +267,6 @@ proc parseSseLine(line: string): JsonNode =
     return nil
 
 proc extractSseDeltaContent(node: JsonNode): string =
-  ## 从 OpenAI 格式的 SSE 节点中提取 delta.content
   result = ""
   if node == nil or not node.hasKey("choices") or node["choices"].kind != JArray:
     return
@@ -294,7 +278,6 @@ proc extractSseDeltaContent(node: JsonNode): string =
       result.add(delta["content"].getStr())
 
 proc evalStreamAssert(sa: StreamAssert; aggregatedContent: string; node: JsonNode; chunkCount: int): bool =
-  ## 判断单个流式断言是否匹配
   if chunkCount < sa.minChunks:
     return false
   case sa.kind

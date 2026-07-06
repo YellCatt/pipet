@@ -1,4 +1,5 @@
-import std/[httpclient, os, strutils, tables, uri]
+import puppy
+import std/[os, strutils, tables, uri]
 
 import logger, types
 

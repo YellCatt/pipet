@@ -1,8 +1,6 @@
-# 使用 BearSSL 实现纯 Nim HTTPS 支持
+# 使用 Puppy HTTP 客户端库，原生支持 HTTPS
 # - nre 替代 std/re：零外部依赖（不需要 libpcre.so）
-# - BearSSL 纯 Nim TLS 实现，无需系统 OpenSSL
-# 启用 SSL 支持
-switch("define", "ssl")
+# - Puppy 利用操作系统原生实现(WinHttp/CoreFoundation)，无需额外 TLS 库
 --path:"nim-regex/src"
 # begin Nimble config (version 2)
 when withDir(thisDir(), system.fileExists("nimble.paths")):
