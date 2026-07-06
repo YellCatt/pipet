@@ -1,6 +1,7 @@
 import std/[json, os, strutils, tables, times, uri]
 import regex
 import puppy
+import puppy/multipart
 
 import logger, types, pool, request, jsonutils
 
@@ -11,6 +12,18 @@ proc tableToHttpHeaders(headers: Table[string, string]): HttpHeaders =
   result = emptyHttpHeaders()
   for k, v in headers:
     result[k] = v
+
+proc buildMultipartBody(textFields: Table[string, string], fileFields: Table[string, string]): tuple[contentType: string, body: string] =
+  var entries: seq[MultipartEntry] = @[]
+  for key, val in textFields:
+    entries.add(MultipartEntry(name: key, payload: val))
+  for key, filePath in fileFields:
+    if fileExists(filePath):
+      let fileData = readFile(filePath)
+      entries.add(MultipartEntry(name: key, fileName: extractFilename(filePath), payload: fileData))
+    else:
+      gLogger.warn("上传文件不存在", {"field": key, "path": filePath}.toTable)
+  result = encodeMultipart(entries)
 
 proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retryDelayMs: int): tuple[status: int, body: string, durationSec: float, error: string] =
   let start = epochTime()
@@ -43,17 +56,19 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
       of "GET":
         resp = get(url, headers = headers)
       of "POST":
-        if multipartFields.files.len > 0:
-          gLogger.warn("Puppy 不支持 multipart 文件上传，请使用其他方式", {"id": tc.id}.toTable)
-          return (status: 0, body: "", durationSec: 0.0, error: "Puppy 不支持 multipart 文件上传")
+        if multipartFields.text.len > 0 or multipartFields.files.len > 0:
+          let (multipartContentType, multipartBody) = buildMultipartBody(multipartFields.text, multipartFields.files)
+          var multipartHeaders = headers
+          multipartHeaders["Content-Type"] = multipartContentType
+          resp = post(url, body = multipartBody, headers = multipartHeaders)
         elif reqBody.len > 0:
-          resp = post(url, body = reqBody, headers = headers)
+          resp = post(url, body = reqBody, headers = headers, contentType = contentType)
         else:
           resp = post(url, headers = headers)
       of "PUT":
-        resp = put(url, body = reqBody, headers = headers)
+        resp = put(url, body = reqBody, headers = headers, contentType = contentType)
       of "PATCH":
-        resp = patch(url, body = reqBody, headers = headers)
+        resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
       of "DELETE":
         resp = delete(url, headers = headers)
       else:
@@ -113,17 +128,19 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
     of "GET":
       resp = get(url, headers = headers)
     of "POST":
-      if multipartFields.files.len > 0:
-        gLogger.warn("Puppy 不支持 multipart 文件上传，请使用其他方式", {"id": c.id}.toTable)
-        return (status: 0, body: "", durationSec: 0.0, error: "Puppy 不支持 multipart 文件上传")
+      if multipartFields.text.len > 0 or multipartFields.files.len > 0:
+        let (multipartContentType, multipartBody) = buildMultipartBody(multipartFields.text, multipartFields.files)
+        var multipartHeaders = headers
+        multipartHeaders["Content-Type"] = multipartContentType
+        resp = post(url, body = multipartBody, headers = multipartHeaders)
       elif reqBody.len > 0:
-        resp = post(url, body = reqBody, headers = headers)
+        resp = post(url, body = reqBody, headers = headers, contentType = contentType)
       else:
         resp = post(url, headers = headers)
     of "PUT":
-      resp = put(url, body = reqBody, headers = headers)
+      resp = put(url, body = reqBody, headers = headers, contentType = contentType)
     of "PATCH":
-      resp = patch(url, body = reqBody, headers = headers)
+      resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
     of "DELETE":
       resp = delete(url, headers = headers)
     else:

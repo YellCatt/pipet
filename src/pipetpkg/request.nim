@@ -38,7 +38,7 @@ proc selectRequestBody*(tc: TestCase): tuple[body: string, contentType: string, 
     return (tc.json, "application/json", (initTable[string, string](), initTable[string, string]()))
   if tc.form.len > 0:
     gLogger.debug("选择表单请求体", {"content_type": "application/x-www-form-urlencoded", "body_len": $tc.form.len}.toTable)
-    return (tc.form, "application/x-www-form-urlencoded", (initTable[string, string](), initTable[string, string]()))
+    return ("", "multipart/form-data", (textFields, initTable[string, string]()))
   if tc.body.len > 0:
     gLogger.debug("选择自定义请求体", {"body_len": $tc.body.len}.toTable)
     return (tc.body, "", (initTable[string, string](), initTable[string, string]()))
