@@ -50,8 +50,6 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
               gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
               continue
             multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
-          for key, val in multipartFields.text:
-            multipart.add(MultipartEntry(name: key, data: val))
           resp = post(url, multipart = multipart, headers = headers)
         elif reqBody.len > 0:
           resp = post(url, body = reqBody, headers = headers, contentType = contentType)
@@ -127,8 +125,6 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
             gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
             continue
           multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
-        for key, val in multipartFields.text:
-          multipart.add(MultipartEntry(name: key, data: val))
         resp = post(url, multipart = multipart, headers = headers)
       elif reqBody.len > 0:
         resp = post(url, body = reqBody, headers = headers, contentType = contentType)
