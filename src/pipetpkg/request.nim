@@ -29,52 +29,42 @@ proc splitFormFields*(form: string): tuple[textFields: Table[string, string], fi
     else:
       result.textFields[key] = val
 
-proc buildMultipartEntries*(textFields: Table[string, string]; fileFields: Table[string, string]): seq[MultipartEntry] =
-  result = @[]
-  for fieldName, filePath in fileFields:
-    if not fileExists(filePath):
-      gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
-      continue
-    result.add(MultipartEntry(name: fieldName, filename: filePath, content: readFile(filePath)))
-  for key, val in textFields:
-    result.add(MultipartEntry(name: key, content: val))
-
-proc selectRequestBody*(tc: TestCase): tuple[body: string, contentType: string, multipart: seq[MultipartEntry]] =
+proc selectRequestBody*(tc: TestCase): tuple[body: string, contentType: string, multipartFields: tuple[text: Table[string, string], files: Table[string, string]]] =
   let (textFields, fileFields) = splitFormFields(tc.form)
   if fileFields.len > 0:
     gLogger.debug("选择 multipart 文件请求体", {"files_count": $fileFields.len, "text_fields_count": $textFields.len}.toTable)
-    return ("", "", buildMultipartEntries(textFields, fileFields))
+    return ("", "", (textFields, fileFields))
   if tc.json.len > 0:
     gLogger.debug("选择 JSON 请求体", {"content_type": "application/json", "body_len": $tc.json.len}.toTable)
-    return (tc.json, "application/json", @[])
+    return (tc.json, "application/json", (initTable[string, string](), initTable[string, string]()))
   if tc.form.len > 0:
     gLogger.debug("选择表单请求体", {"content_type": "application/x-www-form-urlencoded", "body_len": $tc.form.len}.toTable)
-    return (tc.form, "application/x-www-form-urlencoded", @[])
+    return (tc.form, "application/x-www-form-urlencoded", (initTable[string, string](), initTable[string, string]()))
   if tc.body.len > 0:
     gLogger.debug("选择自定义请求体", {"body_len": $tc.body.len}.toTable)
-    return (tc.body, "", @[])
+    return (tc.body, "", (initTable[string, string](), initTable[string, string]()))
   if tc.payload.len > 0:
     gLogger.debug("选择 payload 请求体", {"body_len": $tc.payload.len}.toTable)
-    return (tc.payload, "", @[])
+    return (tc.payload, "", (initTable[string, string](), initTable[string, string]()))
   gLogger.debug("请求体为空")
-  return ("", "", @[])
+  return ("", "", (initTable[string, string](), initTable[string, string]()))
 
-proc selectConditionBody*(c: Condition): tuple[body: string, contentType: string, multipart: seq[MultipartEntry]] =
+proc selectConditionBody*(c: Condition): tuple[body: string, contentType: string, multipartFields: tuple[text: Table[string, string], files: Table[string, string]]] =
   let (textFields, fileFields) = splitFormFields(c.form)
   if fileFields.len > 0:
     gLogger.debug("选择条件 multipart 文件请求体", {"files_count": $fileFields.len, "text_fields_count": $textFields.len}.toTable)
-    return ("", "", buildMultipartEntries(textFields, fileFields))
+    return ("", "", (textFields, fileFields))
   if c.json.len > 0:
     gLogger.debug("选择条件 JSON 请求体", {"content_type": "application/json", "body_len": $c.json.len}.toTable)
-    return (c.json, "application/json", @[])
+    return (c.json, "application/json", (initTable[string, string](), initTable[string, string]()))
   if c.form.len > 0:
     gLogger.debug("选择条件表单请求体", {"content_type": "application/x-www-form-urlencoded", "body_len": $c.form.len}.toTable)
-    return (c.form, "application/x-www-form-urlencoded", @[])
+    return (c.form, "application/x-www-form-urlencoded", (initTable[string, string](), initTable[string, string]()))
   if c.body.len > 0:
     gLogger.debug("选择条件自定义请求体", {"body_len": $c.body.len}.toTable)
-    return (c.body, "", @[])
+    return (c.body, "", (initTable[string, string](), initTable[string, string]()))
   if c.payload.len > 0:
     gLogger.debug("选择条件 payload 请求体", {"body_len": $c.payload.len}.toTable)
-    return (c.payload, "", @[])
+    return (c.payload, "", (initTable[string, string](), initTable[string, string]()))
   gLogger.debug("条件请求体为空")
-  return ("", "", @[])
+  return ("", "", (initTable[string, string](), initTable[string, string]()))

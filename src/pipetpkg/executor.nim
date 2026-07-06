@@ -11,7 +11,7 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
   let start = epochTime()
   let url = buildUrl(tc.url, tc.params)
 
-  let (reqBody, contentType, multipart) = selectRequestBody(tc)
+  let (reqBody, contentType, multipartFields) = selectRequestBody(tc)
 
   gLogger.debug("准备发送 HTTP 请求", {
     "id": tc.id,
@@ -36,7 +36,15 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
       of "GET":
         resp = get(url, headers = tc.headers)
       of "POST":
-        if multipart.len > 0:
+        if multipartFields.files.len > 0:
+          var multipart: seq[MultipartEntry] = @[]
+          for fieldName, filePath in multipartFields.files:
+            if not fileExists(filePath):
+              gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
+              continue
+            multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
+          for key, val in multipartFields.text:
+            multipart.add(MultipartEntry(name: key, data: val))
           resp = post(url, multipart = multipart, headers = tc.headers)
         elif reqBody.len > 0:
           resp = post(url, body = reqBody, headers = tc.headers, contentType = contentType)
@@ -70,7 +78,7 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
 
 proc formatConditionInfo*(c: Condition): tuple[url: string, headers: string, body: string] =
   let finalUrl = buildUrl(c.url, c.params)
-  let (reqBody, contentType, multipart) = selectConditionBody(c)
+  let (reqBody, contentType, multipartFields) = selectConditionBody(c)
   var allHeaders = initTable[string, string]()
   for k, v in c.headers:
     allHeaders[k] = v
@@ -79,14 +87,14 @@ proc formatConditionInfo*(c: Condition): tuple[url: string, headers: string, bod
   let hJson = newJObject()
   for k, v in allHeaders:
     hJson[k] = %v
-  let bodyStr = if multipart.len > 0: "(multipart)" else: reqBody
+  let bodyStr = if multipartFields.files.len > 0: "(multipart)" else: reqBody
   result = (url: finalUrl, headers: $hJson, body: bodyStr)
 
 proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status: int, body: string, durationSec: float, error: string] =
   let start = epochTime()
   let url = buildUrl(c.url, c.params)
 
-  let (reqBody, contentType, multipart) = selectConditionBody(c)
+  let (reqBody, contentType, multipartFields) = selectConditionBody(c)
 
   gLogger.debug("准备发送条件 HTTP 请求", {
     "id": c.id,
@@ -104,7 +112,15 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
     of "GET":
       resp = get(url, headers = c.headers)
     of "POST":
-      if multipart.len > 0:
+      if multipartFields.files.len > 0:
+        var multipart: seq[MultipartEntry] = @[]
+        for fieldName, filePath in multipartFields.files:
+          if not fileExists(filePath):
+            gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
+            continue
+          multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
+        for key, val in multipartFields.text:
+          multipart.add(MultipartEntry(name: key, data: val))
         resp = post(url, multipart = multipart, headers = c.headers)
       elif reqBody.len > 0:
         resp = post(url, body = reqBody, headers = c.headers, contentType = contentType)
@@ -149,7 +165,7 @@ proc runCondition*(c: Condition; pool: HttpClientPool; vars: var Table[string, s
 
 proc formatRequestInfo*(tc: TestCase): tuple[url: string, headers: string, body: string] =
   let finalUrl = buildUrl(tc.url, tc.params)
-  let (reqBody, contentType, multipart) = selectRequestBody(tc)
+  let (reqBody, contentType, multipartFields) = selectRequestBody(tc)
   var allHeaders = initTable[string, string]()
   for k, v in tc.headers:
     allHeaders[k] = v
@@ -158,7 +174,7 @@ proc formatRequestInfo*(tc: TestCase): tuple[url: string, headers: string, body:
   let hJson = newJObject()
   for k, v in allHeaders:
     hJson[k] = %v
-  let bodyStr = if multipart.len > 0: "(multipart)" else: reqBody
+  let bodyStr = if multipartFields.files.len > 0: "(multipart)" else: reqBody
   result = (url: finalUrl, headers: $hJson, body: bodyStr)
 
 proc runTest*(tc: TestCase; pool: HttpClientPool; retryCount: int = 0; retryDelayMs: int = 0): TestResult =
