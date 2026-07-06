@@ -5,7 +5,6 @@ import puppy
 import logger, types, pool, request, jsonutils
 
 proc checkHttpsSupport*(url: string): string =
-  ## Puppy 已原生支持 HTTPS
   return ""
 
 proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retryDelayMs: int): tuple[status: int, body: string, durationSec: float, error: string] =
@@ -31,44 +30,35 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
 
   while attempt < maxAttempts:
     attempt += 1
-    var client = pool.borrowClient()
     try:
-      for k, v in tc.headers:
-        client.headers[k] = v
-      if contentType.len > 0 and not tc.headers.hasKey("Content-Type"):
-        client.headers["Content-Type"] = contentType
-
       var resp: Response
       case tc.httpMethod.toUpperAscii
       of "GET":
-        resp = client.get(url)
+        resp = get(url, headers = tc.headers)
       of "POST":
         if multipart != nil:
-          resp = client.post(url, multipart = multipart)
+          resp = post(url, multipart = multipart, headers = tc.headers)
         elif reqBody.len > 0:
-          resp = client.post(url, body = reqBody)
+          resp = post(url, body = reqBody, headers = tc.headers, contentType = contentType)
         else:
-          resp = client.post(url)
+          resp = post(url, headers = tc.headers)
       of "PUT":
-        resp = client.put(url, body = reqBody)
+        resp = put(url, body = reqBody, headers = tc.headers, contentType = contentType)
       of "PATCH":
-        resp = client.patch(url, body = reqBody)
+        resp = patch(url, body = reqBody, headers = tc.headers, contentType = contentType)
       of "DELETE":
-        resp = client.delete(url)
+        resp = delete(url, headers = tc.headers)
       else:
         gLogger.error("未知 HTTP 方法", {"method": tc.httpMethod}.toTable)
-        pool.returnClient(client)
         return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & tc.httpMethod)
 
       lastError = ""
-      pool.returnClient(client)
 
       let durationSec = epochTime() - start
       return (status: resp.code, body: resp.body, durationSec: durationSec, error: "")
 
     except CatchableError as e:
       lastError = e.msg
-      pool.returnClient(client, discardClient = true)
       if attempt < maxAttempts:
         gLogger.warn("请求失败，准备重试", {"id": tc.id, "attempt": $attempt, "error": e.msg}.toTable)
         if retryDelayMs > 0:
@@ -108,43 +98,33 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
   }.toTable)
 
   var lastError = ""
-  var client = pool.borrowClient()
   try:
-    for k, v in c.headers:
-      client.headers[k] = v
-    if contentType.len > 0 and not c.headers.hasKey("Content-Type"):
-      client.headers["Content-Type"] = contentType
-
     var resp: Response
     case c.httpMethod.toUpperAscii
     of "GET":
-      resp = client.get(url)
+      resp = get(url, headers = c.headers)
     of "POST":
       if multipart != nil:
-        resp = client.post(url, multipart = multipart)
+        resp = post(url, multipart = multipart, headers = c.headers)
       elif reqBody.len > 0:
-        resp = client.post(url, body = reqBody)
+        resp = post(url, body = reqBody, headers = c.headers, contentType = contentType)
       else:
-        resp = client.post(url)
+        resp = post(url, headers = c.headers)
     of "PUT":
-      resp = client.put(url, body = reqBody)
+      resp = put(url, body = reqBody, headers = c.headers, contentType = contentType)
     of "PATCH":
-      resp = client.patch(url, body = reqBody)
+      resp = patch(url, body = reqBody, headers = c.headers, contentType = contentType)
     of "DELETE":
-      resp = client.delete(url)
+      resp = delete(url, headers = c.headers)
     else:
       gLogger.error("未知 HTTP 方法", {"method": c.httpMethod}.toTable)
-      pool.returnClient(client)
       return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & c.httpMethod)
-
-    pool.returnClient(client)
 
     let durationSec = epochTime() - start
     return (status: resp.code, body: resp.body, durationSec: durationSec, error: "")
 
   except CatchableError as e:
     lastError = e.msg
-    pool.returnClient(client, discardClient = true)
     gLogger.error("条件请求异常", {"id": c.id, "error": e.msg}.toTable)
 
   return (status: 0, body: "N/A", durationSec: 0.0, error: lastError)
