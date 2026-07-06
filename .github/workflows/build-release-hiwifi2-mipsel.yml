@@ -111,8 +111,20 @@ jobs:
           INSTALL_PREFIX=$WORK_DIR/.static-deps/${{ env.SUFFIX }}
           mkdir -p $INSTALL_PREFIX
 
+          TOOLCHAIN_DIR=$(find openwrt-sdk/staging_dir -name "toolchain-*" -type d | head -1)
+          if [ -z "$TOOLCHAIN_DIR" ]; then
+            echo "ERROR: 找不到工具链目录"
+            ls -la openwrt-sdk/staging_dir/
+            exit 1
+          fi
+          export PATH="$PWD/$TOOLCHAIN_DIR/bin:$PATH"
+          
+          echo "=== 工具链路径 ==="
+          echo $PATH
+          echo ""
+          echo "=== 检查交叉编译器 ==="
           which mipsel-openwrt-linux-musl-gcc
-          export PATH=$PATH:$(dirname $(which mipsel-openwrt-linux-musl-gcc))
+          mipsel-openwrt-linux-musl-gcc --version
 
           if [ -f "$INSTALL_PREFIX/lib/libcurl.a" ] && [ -f "$INSTALL_PREFIX/lib/libssl.a" ] && [ -f "$INSTALL_PREFIX/lib/libz.a" ]; then
             echo "静态依赖已存在，跳过编译"
