@@ -227,36 +227,28 @@ proc runTest*(tc: TestCase; pool: HttpClientPool; retryCount: int = 0; retryDela
     diffs.add("状态码不符: 期望 " & $tc.expectStatus & ", 实际 " & $actualStatus)
     gLogger.info("状态码不符", {"id": tc.id, "expect": $tc.expectStatus, "actual": $actualStatus}.toTable)
 
-  var actualBodyJson: JsonNode
-  try:
-    actualBodyJson = parseJson(actualBody)
-  except JsonParsingError:
-    if diffs.len == 0:
+  if tc.expectBody.kind != JNull:
+    var actualBodyJson: JsonNode
+    try:
+      actualBodyJson = parseJson(actualBody)
+      let bodyDiffs = jsonDiff(tc.expectBody, actualBodyJson, "", tc.matchMode)
+      if bodyDiffs.len > 0:
+        diffs.add(bodyDiffs)
+        gLogger.info("JSON 字段差异", {"id": tc.id, "diffs": bodyDiffs.join(" | ")}.toTable)
+    except JsonParsingError:
       let preview = actualBody[0 ..< min(200, actualBody.len)]
       gLogger.info("响应不是合法 JSON", {"id": tc.id, "preview": preview}.toTable)
-      return TestResult(
-        id: tc.id, desc: tc.desc, httpMethod: tc.httpMethod, url: reqUrl, requestHeaders: reqHeaders, requestBody: reqBody, status: "FAIL", durationSec: durationSec,
-        expectStatus: tc.expectStatus, actualStatus: actualStatus,
-        diff: "响应不是合法 JSON: " & preview,
-        actualBody: actualBody,
-        expectBody: expectBodyStr,
-        tags: tags
-      )
-    else:
-      return TestResult(
-        id: tc.id, desc: tc.desc, httpMethod: tc.httpMethod, url: reqUrl, requestHeaders: reqHeaders, requestBody: reqBody, status: "FAIL", durationSec: durationSec,
-        expectStatus: tc.expectStatus, actualStatus: actualStatus,
-        diff: diffs.join(" | "),
-        actualBody: actualBody,
-        expectBody: expectBodyStr,
-        tags: tags
-      )
-
-  if tc.expectBody.kind != JNull:
-    let bodyDiffs = jsonDiff(tc.expectBody, actualBodyJson, "", tc.matchMode)
-    if bodyDiffs.len > 0:
-      diffs.add(bodyDiffs)
-      gLogger.info("JSON 字段差异", {"id": tc.id, "diffs": bodyDiffs.join(" | ")}.toTable)
+      if diffs.len == 0:
+        return TestResult(
+          id: tc.id, desc: tc.desc, httpMethod: tc.httpMethod, url: reqUrl, requestHeaders: reqHeaders, requestBody: reqBody, status: "FAIL", durationSec: durationSec,
+          expectStatus: tc.expectStatus, actualStatus: actualStatus,
+          diff: "响应不是合法 JSON: " & preview,
+          actualBody: actualBody,
+          expectBody: expectBodyStr,
+          tags: tags
+        )
+      else:
+        diffs.add("响应不是合法 JSON: " & preview)
 
   if diffs.len > 0:
     return TestResult(
