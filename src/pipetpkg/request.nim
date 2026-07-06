@@ -35,7 +35,7 @@ proc buildMultipartEntries*(textFields: Table[string, string]; fileFields: Table
     if not fileExists(filePath):
       gLogger.warn("上传文件不存在", {"field": fieldName, "path": filePath}.toTable)
       continue
-    result.add(MultipartEntry(name: fieldName, filename: filePath, fileContent: readFile(filePath)))
+    result.add(MultipartEntry(name: fieldName, filename: filePath, content: readFile(filePath)))
   for key, val in textFields:
     result.add(MultipartEntry(name: key, content: val))
 
