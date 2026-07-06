@@ -19,7 +19,7 @@ pipet/
 ├── pipet.nimble
 ├── README.md
 ├── .gitignore
-├── config.nims              # 默认启用 SSL 的项目配置
+├── config.nims              # 项目配置（使用 Puppy HTTP 客户端）
 ├── config.yaml              # 变量配置
 ├── data/                    # 测试数据文件，如上传文件
 ├── src/
@@ -39,7 +39,7 @@ pipet/
 
 ## 编译运行
 
-`config.nims` 已默认启用 SSL，构建时无需再传 `-d:ssl`。程序会优先在 `pipet.exe` 所在目录查找 `config.yaml` 和 `test_data.psv`，方便打包分发。
+程序使用 Puppy HTTP 客户端，原生支持 HTTPS，无需额外 SSL 配置。程序会优先在 `pipet.exe` 所在目录查找 `config.yaml` 和 `test_data.psv`，方便打包分发。
 
 ```bash
 # 用 nimble 构建 release 版（输出到 dist/pipet/）
@@ -159,7 +159,7 @@ id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_b
 - 列按需加载：每个 PSV 文件可以只包含自己需要的列，不存在的列留空或省略表头即可；`json`、`form`、`body` 等空列表示不发送该类型请求体
 - 入参类型按优先级自动选择：
   - `params`：URL 查询参数，如 `foo=bar&baz=1`，自动拼接到 URL
-  - `form`：自动以 `application/x-www-form-urlencoded` 发送；当字段值以 `@` 或 `file://` 开头时，会作为 `multipart/form-data` 文件字段上传，例如 `name=demo&upload=@data/sample.txt`
+  - `form`：自动以 `multipart/form-data` 发送；字段值以 `@` 或 `file://` 开头时作为文件字段上传，例如 `name=demo&upload=@data/sample.txt`
   - `json`：自动以 `application/json` 发送
   - `body`：原始请求体，配合 `headers` 中的 `Content-Type` 使用
   - `payload`：兼容旧列，作为无类型原始 body
