@@ -1,7 +1,6 @@
 import std/[json, os, strutils, tables, times, uri]
 import regex
 import puppy
-import puppy/multipart
 
 import logger, types, pool, request, jsonutils
 
