@@ -61,13 +61,22 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
           multipartHeaders["Content-Type"] = multipartContentType
           resp = post(url, body = multipartBody, headers = multipartHeaders)
         elif reqBody.len > 0:
-          resp = post(url, body = reqBody, headers = headers, contentType = contentType)
+          var contentHeaders = headers
+          if contentType.len > 0:
+            contentHeaders["Content-Type"] = contentType
+          resp = post(url, body = reqBody, headers = contentHeaders)
         else:
           resp = post(url, headers = headers)
       of "PUT":
-        resp = put(url, body = reqBody, headers = headers, contentType = contentType)
+        var putHeaders = headers
+        if contentType.len > 0:
+          putHeaders["Content-Type"] = contentType
+        resp = put(url, body = reqBody, headers = putHeaders)
       of "PATCH":
-        resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
+        var patchHeaders = headers
+        if contentType.len > 0:
+          patchHeaders["Content-Type"] = contentType
+        resp = patch(url, body = reqBody, headers = patchHeaders)
       of "DELETE":
         resp = delete(url, headers = headers)
       else:
@@ -133,13 +142,22 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
         multipartHeaders["Content-Type"] = multipartContentType
         resp = post(url, body = multipartBody, headers = multipartHeaders)
       elif reqBody.len > 0:
-        resp = post(url, body = reqBody, headers = headers, contentType = contentType)
+        var contentHeaders = headers
+        if contentType.len > 0:
+          contentHeaders["Content-Type"] = contentType
+        resp = post(url, body = reqBody, headers = contentHeaders)
       else:
         resp = post(url, headers = headers)
     of "PUT":
-      resp = put(url, body = reqBody, headers = headers, contentType = contentType)
+      var putHeaders = headers
+      if contentType.len > 0:
+        putHeaders["Content-Type"] = contentType
+      resp = put(url, body = reqBody, headers = putHeaders)
     of "PATCH":
-      resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
+      var patchHeaders = headers
+      if contentType.len > 0:
+        patchHeaders["Content-Type"] = contentType
+      resp = patch(url, body = reqBody, headers = patchHeaders)
     of "DELETE":
       resp = delete(url, headers = headers)
     else:
