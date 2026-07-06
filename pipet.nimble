@@ -6,17 +6,18 @@ srcDir        = "src"
 
 requires "nim >= 2.0.0"
 requires "yaml >= 2.0.0"
+requires "bearssl >= 0.1.0"
 # regex 使用本地 nim-regex/ 源码；其依赖 unicodedb 仍通过 nimble 安装
 requires "unicodedb >= 0.13.2"
 
 bin = @["pipet"]
 binDir = "dist/pipet"
 
-task release, "Build release binary (fully static, no external .so/.dll)":
+task release, "Build release binary (with BearSSL HTTPS support)":
   when defined(windows):
-    exec "nimble build -d:release --opt:size --dynlibOverride:ssl --dynlibOverride:crypto"
+    exec "nimble build -d:release --opt:size"
   else:
-    exec "nimble build -d:release --opt:size --passC:-static --passL:-static --dynlibOverride:ssl --dynlibOverride:crypto"
+    exec "nimble build -d:release --opt:size"
 
 task package, "Package exe and resources into dist/pipet":
   rmDir "dist"
