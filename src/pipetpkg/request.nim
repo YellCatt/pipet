@@ -1,5 +1,4 @@
-import puppy
-import std/[os, strutils, tables, uri]
+import std/[strutils, tables, uri]
 
 import logger, types
 

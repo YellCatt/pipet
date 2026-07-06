@@ -7,6 +7,11 @@ import logger, types, pool, request, jsonutils
 proc checkHttpsSupport*(url: string): string =
   return ""
 
+proc tableToHttpHeaders(headers: Table[string, string]): HttpHeaders =
+  result = newHttpHeaders()
+  for k, v in headers:
+    result[k] = v
+
 proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retryDelayMs: int): tuple[status: int, body: string, durationSec: float, error: string] =
   let start = epochTime()
   let url = buildUrl(tc.url, tc.params)
@@ -28,13 +33,15 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
   var attempt = 0
   let maxAttempts = retryCount + 1
 
+  let headers = tableToHttpHeaders(tc.headers)
+
   while attempt < maxAttempts:
     attempt += 1
     try:
       var resp: Response
       case tc.httpMethod.toUpperAscii
       of "GET":
-        resp = get(url, headers = tc.headers)
+        resp = get(url, headers = headers)
       of "POST":
         if multipartFields.files.len > 0:
           var multipart: seq[MultipartEntry] = @[]
@@ -45,17 +52,17 @@ proc execHttpRequest*(tc: TestCase; pool: HttpClientPool; retryCount: int; retry
             multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
           for key, val in multipartFields.text:
             multipart.add(MultipartEntry(name: key, data: val))
-          resp = post(url, multipart = multipart, headers = tc.headers)
+          resp = post(url, multipart = multipart, headers = headers)
         elif reqBody.len > 0:
-          resp = post(url, body = reqBody, headers = tc.headers, contentType = contentType)
+          resp = post(url, body = reqBody, headers = headers, contentType = contentType)
         else:
-          resp = post(url, headers = tc.headers)
+          resp = post(url, headers = headers)
       of "PUT":
-        resp = put(url, body = reqBody, headers = tc.headers, contentType = contentType)
+        resp = put(url, body = reqBody, headers = headers, contentType = contentType)
       of "PATCH":
-        resp = patch(url, body = reqBody, headers = tc.headers, contentType = contentType)
+        resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
       of "DELETE":
-        resp = delete(url, headers = tc.headers)
+        resp = delete(url, headers = headers)
       else:
         gLogger.error("未知 HTTP 方法", {"method": tc.httpMethod}.toTable)
         return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & tc.httpMethod)
@@ -106,11 +113,12 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
   }.toTable)
 
   var lastError = ""
+  let headers = tableToHttpHeaders(c.headers)
   try:
     var resp: Response
     case c.httpMethod.toUpperAscii
     of "GET":
-      resp = get(url, headers = c.headers)
+      resp = get(url, headers = headers)
     of "POST":
       if multipartFields.files.len > 0:
         var multipart: seq[MultipartEntry] = @[]
@@ -121,17 +129,17 @@ proc execConditionHttpRequest*(c: Condition; pool: HttpClientPool): tuple[status
           multipart.add(MultipartEntry(name: fieldName, fileName: filePath))
         for key, val in multipartFields.text:
           multipart.add(MultipartEntry(name: key, data: val))
-        resp = post(url, multipart = multipart, headers = c.headers)
+        resp = post(url, multipart = multipart, headers = headers)
       elif reqBody.len > 0:
-        resp = post(url, body = reqBody, headers = c.headers, contentType = contentType)
+        resp = post(url, body = reqBody, headers = headers, contentType = contentType)
       else:
-        resp = post(url, headers = c.headers)
+        resp = post(url, headers = headers)
     of "PUT":
-      resp = put(url, body = reqBody, headers = c.headers, contentType = contentType)
+      resp = put(url, body = reqBody, headers = headers, contentType = contentType)
     of "PATCH":
-      resp = patch(url, body = reqBody, headers = c.headers, contentType = contentType)
+      resp = patch(url, body = reqBody, headers = headers, contentType = contentType)
     of "DELETE":
-      resp = delete(url, headers = c.headers)
+      resp = delete(url, headers = headers)
     else:
       gLogger.error("未知 HTTP 方法", {"method": c.httpMethod}.toTable)
       return (status: 0, body: "", durationSec: 0.0, error: "未知 HTTP 方法: " & c.httpMethod)
